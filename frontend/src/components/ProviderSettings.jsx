@@ -8,6 +8,121 @@ const PROVIDER_ORDER = [
   { name: 'claude', label: 'Anthropic Claude' },
 ];
 
+function ProviderOption({
+  name,
+  label,
+  isSelected,
+  config,
+  onSelect,
+  onUpdateField,
+  onTestApiKey,
+  testingKey,
+  keyStatus,
+}) {
+  return (
+    <div className="space-y-3" key={name}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        className="w-full flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-colors hover:bg-stone-50 text-left"
+        style={{ borderColor: isSelected ? '#f59e0b' : '#e5e7eb' }}
+      >
+        <input
+          type="radio"
+          name="ai_provider"
+          value={name}
+          checked={isSelected}
+          onChange={onSelect}
+          onClick={(e) => e.stopPropagation()}
+          className="w-4 h-4 text-amber-500 focus:ring-amber-500"
+          aria-label={`${label} provider`}
+        />
+        <span className="font-medium text-stone-800 flex-1">{label}</span>
+        <span className="text-xs text-stone-500">
+          {isSelected ? 'Selected' : 'Select'}
+        </span>
+      </div>
+
+      {isSelected && (
+        <div className="ml-7 space-y-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
+              Model Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={config?.model ?? ''}
+              onChange={(e) => onUpdateField(name, 'model', e.target.value)}
+              placeholder={
+                name === 'openai' ? 'gpt-4o-mini' :
+                name === 'claude' ? 'claude-3-haiku-20240307' :
+                name === 'gemini' ? 'gemini-pro' :
+                'your-model-name'
+              }
+              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
+              API Key <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="password"
+              value={config?.api_key ?? ''}
+              onChange={(e) => onUpdateField(name, 'api_key', e.target.value)}
+              placeholder="Enter your API key"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              required
+            />
+            <button
+              type="button"
+              onClick={onTestApiKey}
+              className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
+            >
+              {testingKey ? 'Testing...' : 'Test API Key'}
+            </button>
+          </div>
+
+          {name === 'azure_openai' && (
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                Endpoint URL <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={config?.endpoint ?? ''}
+                onChange={(e) => onUpdateField(name, 'endpoint', e.target.value)}
+                placeholder="https://your-resource.openai.azure.com"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                required
+              />
+            </div>
+          )}
+
+          {keyStatus && (
+            <div className={`p-3 rounded-lg text-sm ${
+              keyStatus.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+              keyStatus.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+              'bg-yellow-50 text-yellow-800 border border-yellow-200'
+            }`}>
+              {keyStatus.message}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProviderSettings({ providers, onChange, onClose }) {
   const modalRef = useRef(null);
   const [activeProvider, setActiveProvider] = useState(() => {
@@ -198,115 +313,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     }
   };
 
-  const ProviderOption = ({ name, label }) => {
-    const isSelected = activeProvider === name;
-    const config = localProviders[name];
-    const selectProvider = () => handleProviderChange(name);
-
-    return (
-      <div className="space-y-3" key={name}>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={selectProvider}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              selectProvider();
-            }
-          }}
-          className="w-full flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-colors hover:bg-stone-50 text-left"
-          style={{ borderColor: isSelected ? '#f59e0b' : '#e5e7eb' }}
-        >
-          <input
-            type="radio"
-            name="ai_provider"
-            value={name}
-            checked={isSelected}
-            onChange={selectProvider}
-            onClick={(e) => e.stopPropagation()}
-            className="w-4 h-4 text-amber-500 focus:ring-amber-500"
-            aria-label={`${label} provider`}
-          />
-          <span className="font-medium text-stone-800 flex-1">{label}</span>
-          <span className="text-xs text-stone-500">
-            {isSelected ? 'Selected' : 'Select'}
-          </span>
-        </div>
-
-        {isSelected && (
-          <div className="ml-7 space-y-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">
-                Model Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={config?.model ?? ''}
-                onChange={(e) => updateProviderField(name, 'model', e.target.value)}
-                placeholder={
-                  name === 'openai' ? 'gpt-4o-mini' :
-                  name === 'claude' ? 'claude-3-haiku-20240307' :
-                  name === 'gemini' ? 'gemini-pro' :
-                  'your-model-name'
-                }
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">
-                API Key <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={config?.api_key ?? ''}
-                onChange={(e) => updateProviderField(name, 'api_key', e.target.value)}
-                placeholder="Enter your API key"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                required
-              />
-              <button
-                type="button"
-                onClick={testApiKey}
-                className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
-              >
-                {testingKey ? 'Testing...' : 'Test API Key'}
-              </button>
-            </div>
-
-            {name === 'azure_openai' && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">
-                  Endpoint URL <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={config?.endpoint ?? ''}
-                  onChange={(e) => updateProviderField(name, 'endpoint', e.target.value)}
-                  placeholder="https://your-resource.openai.azure.com"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                  required
-                />
-              </div>
-            )}
-
-            {keyStatus && (
-              <div className={`p-3 rounded-lg text-sm ${
-                keyStatus.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
-                keyStatus.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
-                'bg-yellow-50 text-yellow-800 border border-yellow-200'
-              }`}>
-                {keyStatus.message}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div
@@ -335,7 +341,18 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
           <div className="space-y-3">
             {PROVIDER_ORDER.map((p) => (
-              <ProviderOption key={p.name} name={p.name} label={p.label} />
+              <ProviderOption
+                key={p.name}
+                name={p.name}
+                label={p.label}
+                isSelected={activeProvider === p.name}
+                config={localProviders[p.name]}
+                onSelect={() => handleProviderChange(p.name)}
+                onUpdateField={updateProviderField}
+                onTestApiKey={testApiKey}
+                testingKey={testingKey}
+                keyStatus={activeProvider === p.name ? keyStatus : null}
+              />
             ))}
           </div>
 
