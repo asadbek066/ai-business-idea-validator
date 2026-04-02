@@ -45,9 +45,7 @@ function ProviderOption({
           aria-label={`${label} provider`}
         />
         <span className="font-medium text-stone-800 flex-1">{label}</span>
-        <span className="text-xs text-stone-500">
-          {isSelected ? 'Selected' : 'Select'}
-        </span>
+        <span className="text-xs text-stone-500">{isSelected ? 'Selected' : 'Select'}</span>
       </div>
 
       {isSelected && (
@@ -131,14 +129,11 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     }
     return 'openai';
   });
-  
-  // Separate state for provider configs - don't tie to input values
-  // Also keep a draft in localStorage so closing the modal doesn't feel like it "ate" edits.
+
   const [localProviders, setLocalProviders] = useState(() => {
     try {
       const draft = localStorage.getItem(DRAFT_KEY);
       const parsed = draft ? JSON.parse(draft) : providers;
-      // Normalize shape so every field stays editable (no undefined/null surprises)
       const normalized = { ...parsed };
       for (const { name } of PROVIDER_ORDER) {
         normalized[name] = {
@@ -148,8 +143,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
           endpoint: String(normalized[name]?.endpoint ?? ''),
         };
       }
-      // Ensure exactly one enabled provider (default to openai)
-      const enabled = PROVIDER_ORDER.filter(p => normalized[p.name]?.enabled).map(p => p.name);
+      const enabled = PROVIDER_ORDER.filter((p) => normalized[p.name]?.enabled).map((p) => p.name);
       if (enabled.length !== 1) {
         for (const { name } of PROVIDER_ORDER) normalized[name].enabled = false;
         normalized.openai.enabled = true;
@@ -159,10 +153,10 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
       return providers;
     }
   });
+
   const [testingKey, setTestingKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState(null);
 
-  // Click outside to close
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
@@ -174,6 +168,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         onClose();
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
     return () => {
@@ -201,7 +196,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   }, [localProviders]);
 
   const updateProviderField = useCallback((providerName, field, value) => {
-    setLocalProviders(prev => {
+    setLocalProviders((prev) => {
       const updated = {
         ...prev,
         [providerName]: {
@@ -227,7 +222,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
       // ignore
     }
     onClose();
-  }, [localProviders, activeProvider, onChange, onClose]);
+  }, [localProviders, onChange, onClose]);
 
   const handleCancel = useCallback(() => {
     try {
@@ -249,10 +244,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
       missing.push('endpoint URL');
     }
     if (missing.length > 0) {
-      setKeyStatus({
-        type: 'error',
-        message: `Please fill: ${missing.join(', ')}.`,
-      });
+      setKeyStatus({ type: 'error', message: `Please fill: ${missing.join(', ')}.` });
       return;
     }
 
@@ -261,12 +253,11 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
     try {
       const API_BASE = import.meta.env.VITE_API_URL || '/api';
-      const testIdea = 'Test business idea';
       const res = await fetch(`${API_BASE}/analyze-idea`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          idea: testIdea,
+          idea: 'Test business idea',
           ai_providers: {
             ...Object.fromEntries(
               Object.entries(localProviders).map(([name, cfg]) => [
@@ -280,34 +271,14 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
       const data = await res.json();
 
-      if (res.ok) {
-        // Provider used and no fallback message -> key looks good
-        if (data.provider_used === activeProvider && !data.fallback_message) {
-          setKeyStatus({ type: 'success', message: 'API key is valid.' });
-        } else if (data.fallback_message) {
-          // Backend explicitly reports fallback (e.g. invalid or missing key)
-          setKeyStatus({
-            type: 'warning',
-            message: data.fallback_message,
-          });
-        } else {
-          setKeyStatus({
-            type: 'warning',
-            message: 'Provider did not respond as expected.',
-          });
-        }
+      if (res.ok && data.provider_used === activeProvider) {
+        setKeyStatus({ type: 'success', message: 'API key is valid.' });
       } else {
-        const detail = data.detail || data.fallback_message || `HTTP ${res.status}`;
-        setKeyStatus({
-          type: 'error',
-          message: `Provider test failed: ${detail}`,
-        });
+        const detail = data.detail || `HTTP ${res.status}`;
+        setKeyStatus({ type: 'error', message: `Provider test failed: ${detail}` });
       }
     } catch (error) {
-      setKeyStatus({
-        type: 'error',
-        message: `Failed to test API key: ${error.message}`,
-      });
+      setKeyStatus({ type: 'error', message: `Failed to test API key: ${error.message}` });
     } finally {
       setTestingKey(false);
     }
@@ -321,22 +292,22 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-stone-800">AI Provider Settings</h2>
+          <h2 className="text-xl font-bold text-stone-800">Provider Settings</h2>
           <button
             onClick={handleCancel}
             className="text-stone-400 hover:text-stone-600 text-2xl leading-none transition-colors"
             aria-label="Close"
           >
-            ×
+            x
           </button>
         </div>
 
         <div className="p-6 space-y-4">
           <p className="text-sm text-stone-600">
-            Select <strong>one AI provider</strong> for analysis.
+            Choose one provider for this session.
           </p>
           <p className="text-xs text-stone-500">
-            Tip: click <strong>Save Settings</strong> to apply changes. Closing cancels.
+            Save applies changes. Cancel closes without saving.
           </p>
 
           <div className="space-y-3">
