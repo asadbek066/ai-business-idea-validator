@@ -6,7 +6,7 @@ export default function ResultCard({ title, children, icon }) {
         {title}
       </h3>
       <div className="text-stone-600 text-sm leading-relaxed whitespace-pre-wrap">
-        {children || '—'}
+        {children || '-'}
       </div>
     </section>
   );

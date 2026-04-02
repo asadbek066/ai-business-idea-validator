@@ -19,15 +19,18 @@ function normalizeProviders(saved) {
     gemini: { ...DEFAULT_PROVIDERS.gemini, ...(saved?.gemini || {}) },
     claude: { ...DEFAULT_PROVIDERS.claude, ...(saved?.claude || {}) },
   };
+
   const enabledKeys = Object.entries(merged)
     .filter(([, cfg]) => Boolean(cfg?.enabled))
     .map(([name]) => name);
+
   if (enabledKeys.length !== 1) {
     Object.keys(merged).forEach((name) => {
       merged[name].enabled = false;
     });
     merged.openai.enabled = true;
   }
+
   return merged;
 }
 
@@ -65,15 +68,15 @@ export default function App() {
       <header className="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-stone-800">AI Business Idea Validator</h1>
-            <p className="text-stone-500 text-sm mt-0.5">Get market potential, risks, first steps, and a verdict.</p>
+            <h1 className="text-xl font-bold text-stone-800">Business Idea Validator</h1>
+            <p className="text-stone-500 text-sm mt-0.5">Market potential, risks, first steps, and a practical verdict.</p>
           </div>
           <button
             onClick={() => setShowSettings(true)}
             className="px-3 py-1.5 text-sm rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 transition-colors"
-            title="AI Provider Settings"
+            title="Provider settings"
           >
-            ⚙️ Settings
+            Settings
           </button>
         </div>
       </header>
@@ -91,26 +94,21 @@ export default function App() {
 
         {result && !loading && (
           <div className="mt-8 space-y-4">
-            {result.fallback_message && (
-              <div className="p-4 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm" role="alert">
-                ⚠️ {result.fallback_message}
-              </div>
-            )}
             {result.provider_used && (
               <div className="text-xs text-stone-500 mb-2">
-                Powered by: <span className="font-medium">{result.provider_used}</span>
+                Provider: <span className="font-medium">{result.provider_used}</span>
               </div>
             )}
-            <ResultCard title="Market potential" icon="📈">{result.market_potential}</ResultCard>
-            <ResultCard title="Risks & challenges" icon="⚠️">{result.risks}</ResultCard>
-            <ResultCard title="First steps" icon="🎯">{result.first_steps}</ResultCard>
-            <ResultCard title="Verdict" icon="✓">{result.verdict}</ResultCard>
+            <ResultCard title="Market potential">{result.market_potential}</ResultCard>
+            <ResultCard title="Risks and challenges">{result.risks}</ResultCard>
+            <ResultCard title="First steps">{result.first_steps}</ResultCard>
+            <ResultCard title="Verdict">{result.verdict}</ResultCard>
           </div>
         )}
       </main>
 
       <footer className="border-t border-stone-200 py-4 text-center text-stone-400 text-xs">
-        Uses AI for analysis. Not financial or legal advice.
+        For planning only. Not financial or legal advice.
       </footer>
 
       {showSettings && (
