@@ -8,6 +8,16 @@ const PROVIDER_ORDER = [
   { name: 'claude', label: 'Anthropic Claude' },
 ];
 
+function stripApiKeys(config) {
+  const copy = JSON.parse(JSON.stringify(config || {}));
+  Object.keys(copy).forEach((name) => {
+    if (copy[name] && typeof copy[name] === 'object') {
+      copy[name].api_key = '';
+    }
+  });
+  return copy;
+}
+
 function ProviderOption({
   name,
   label,
@@ -133,7 +143,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   const [localProviders, setLocalProviders] = useState(() => {
     try {
       const draft = localStorage.getItem(DRAFT_KEY);
-      const parsed = draft ? JSON.parse(draft) : providers;
+      const parsed = draft ? { ...providers, ...JSON.parse(draft) } : providers;
       const normalized = { ...parsed };
       for (const { name } of PROVIDER_ORDER) {
         normalized[name] = {
@@ -187,7 +197,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     }
     setLocalProviders(updated);
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(stripApiKeys(updated)));
     } catch {
       // ignore
     }
@@ -205,7 +215,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         },
       };
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(stripApiKeys(updated)));
       } catch {
         // ignore
       }
