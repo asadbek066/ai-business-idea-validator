@@ -1,6 +1,7 @@
 """Multi-provider AI client abstraction."""
 import asyncio
 import logging
+import os
 from typing import Any
 from abc import ABC, abstractmethod
 import httpx
@@ -83,14 +84,22 @@ class OpenAIProvider(AIProvider):
 class AzureOpenAIProvider(AIProvider):
     """Azure OpenAI provider."""
     
-    def __init__(self, endpoint: str, api_key: str, model: str):
+    def __init__(self, endpoint: str, api_key: str, model: str, api_version: str | None = None):
         self.endpoint = endpoint.rstrip('/')
         self.api_key = api_key
         self.model = model
+        self.api_version = (
+            (api_version or "").strip()
+            or os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview").strip()
+            or "2025-01-01-preview"
+        )
     
     async def analyze(self, idea: str) -> tuple[str, str]:
         """Call Azure OpenAI API."""
-        url = f"{self.endpoint}/openai/deployments/{self.model}/chat/completions?api-version=2024-02-15-preview"
+        url = (
+            f"{self.endpoint}/openai/deployments/{self.model}/chat/completions"
+            f"?api-version={self.api_version}"
+        )
         headers = {"api-key": self.api_key}
         payload = {
             "messages": [
