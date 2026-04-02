@@ -5,7 +5,6 @@ const getHistoryKey = (provider, field) => `ai_provider_history_${provider}_${fi
 const MAX_HISTORY = 10;
 const DRAFT_KEY = 'ai_providers_draft';
 const PROVIDER_ORDER = [
-  { name: 'ollama', label: 'Ollama (Local - Recommended)' },
   { name: 'openai', label: 'OpenAI' },
   { name: 'azure_openai', label: 'Azure OpenAI' },
   { name: 'gemini', label: 'Google Gemini' },
@@ -39,7 +38,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     for (const [name, config] of Object.entries(providers)) {
       if (config.enabled) return name;
     }
-    return 'ollama';
+    return 'openai';
   });
   
   // Separate state for provider configs - don't tie to input values
@@ -56,14 +55,13 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
           model: String(normalized[name]?.model ?? ''),
           api_key: normalized[name]?.api_key ?? '',
           endpoint: String(normalized[name]?.endpoint ?? ''),
-          url: String(normalized[name]?.url ?? 'http://localhost:11434'),
         };
       }
-      // Ensure exactly one enabled provider (default to ollama)
+      // Ensure exactly one enabled provider (default to openai)
       const enabled = PROVIDER_ORDER.filter(p => normalized[p.name]?.enabled).map(p => p.name);
       if (enabled.length !== 1) {
         for (const { name } of PROVIDER_ORDER) normalized[name].enabled = false;
-        normalized.ollama.enabled = true;
+        normalized.openai.enabled = true;
       }
       return normalized;
     } catch {
@@ -139,7 +137,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     setKeyStatus(null);
     
     // Update autocomplete suggestions
-    if (field === 'model' || field === 'endpoint' || field === 'url') {
+    if (field === 'model' || field === 'endpoint') {
       const history = getHistory(providerName, field);
       const filtered = history.filter(h => h.toLowerCase().includes(value.toLowerCase()));
       setAutocompleteState(prev => ({
@@ -157,7 +155,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     const config = localProviders[activeProvider];
     if (config.model) saveToHistory(activeProvider, 'model', config.model);
     if (config.endpoint) saveToHistory(activeProvider, 'endpoint', config.endpoint);
-    if (config.url) saveToHistory(activeProvider, 'url', config.url);
     
     onChange(localProviders);
     try {
@@ -181,20 +178,18 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     if (testingKey) return;
 
     const config = localProviders[activeProvider];
-    if (activeProvider !== 'ollama') {
-      const missing = [];
-      if (!String(config.model || '').trim()) missing.push('model name');
-      if (!String(config.api_key || '').trim()) missing.push('API key');
-      if (activeProvider === 'azure_openai' && !String(config.endpoint || '').trim()) {
-        missing.push('endpoint URL');
-      }
-      if (missing.length > 0) {
-        setKeyStatus({
-          type: 'error',
-          message: `Please fill: ${missing.join(', ')}.`,
-        });
-        return;
-      }
+    const missing = [];
+    if (!String(config.model || '').trim()) missing.push('model name');
+    if (!String(config.api_key || '').trim()) missing.push('API key');
+    if (activeProvider === 'azure_openai' && !String(config.endpoint || '').trim()) {
+      missing.push('endpoint URL');
+    }
+    if (missing.length > 0) {
+      setKeyStatus({
+        type: 'error',
+        message: `Please fill: ${missing.join(', ')}.`,
+      });
+      return;
     }
 
     setTestingKey(true);
@@ -234,7 +229,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         } else {
           setKeyStatus({
             type: 'warning',
-            message: 'Provider did not respond as expected. Ollama may be used as fallback.',
+            message: 'Provider did not respond as expected.',
           });
         }
       } else {
@@ -396,7 +391,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
                 value={config?.model ?? ''}
                 onChange={(value) => updateProviderField(name, 'model', value)}
                 placeholder={
-                  name === 'ollama' ? 'qwen2.5:1.5b' :
                   name === 'openai' ? 'gpt-4o-mini' :
                   name === 'claude' ? 'claude-3-haiku-20240307' :
                   name === 'gemini' ? 'gemini-pro' :
@@ -406,28 +400,26 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
               />
             </div>
 
-            {name !== 'ollama' && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">
-                  API Key <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={config?.api_key ?? ''}
-                  onChange={(e) => updateProviderField(name, 'api_key', e.target.value)}
-                  placeholder="Enter your API key"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={testApiKey}
-                  className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
-                >
-                  {testingKey ? 'Testing...' : 'Test API Key'}
-                </button>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">
+                API Key <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={config?.api_key ?? ''}
+                onChange={(e) => updateProviderField(name, 'api_key', e.target.value)}
+                placeholder="Enter your API key"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                required
+              />
+              <button
+                type="button"
+                onClick={testApiKey}
+                className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
+              >
+                {testingKey ? 'Testing...' : 'Test API Key'}
+              </button>
+            </div>
 
             {name === 'azure_openai' && (
               <div>
@@ -441,21 +433,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
                   onChange={(value) => updateProviderField(name, 'endpoint', value)}
                   placeholder="https://your-resource.openai.azure.com"
                   required
-                />
-              </div>
-            )}
-
-            {name === 'ollama' && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">
-                  Ollama URL
-                </label>
-                <AutocompleteInput
-                  providerName={name}
-                  field="url"
-                  value={config?.url ?? 'http://localhost:11434'}
-                  onChange={(value) => updateProviderField(name, 'url', value)}
-                  placeholder="http://localhost:11434"
                 />
               </div>
             )}
@@ -495,7 +472,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
         <div className="p-6 space-y-4">
           <p className="text-sm text-stone-600">
-            Select <strong>one AI provider</strong> for analysis. If the selected provider fails, Ollama will be used as fallback.
+            Select <strong>one AI provider</strong> for analysis.
           </p>
           <p className="text-xs text-stone-500">
             Tip: click <strong>Save Settings</strong> to apply changes. Closing cancels.

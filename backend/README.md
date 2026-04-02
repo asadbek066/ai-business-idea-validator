@@ -1,6 +1,6 @@
 ﻿# Business Idea Validator - Backend
 
-FastAPI backend for the AI Business Idea Validator. Uses Ollama (local) by default, with optional cloud providers.
+FastAPI backend for the AI Business Idea Validator using cloud providers (OpenAI, Azure OpenAI, Gemini, Claude).
 
 ## Setup
 
@@ -32,13 +32,7 @@ copy .env.example .env   # Windows
 
 ## Run locally
 
-1. Start Ollama and pull a model, for example:
-
-```bash
-ollama run qwen2.5:1.5b
-```
-
-2. Start the backend from the `backend` folder:
+Start the backend from the `backend` folder:
 
 ```bash
 uvicorn app.main:app --reload --port 8000

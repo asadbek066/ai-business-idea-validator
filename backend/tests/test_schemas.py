@@ -12,6 +12,6 @@ def test_analyze_request_strips_idea() -> None:
 def test_only_one_provider_can_be_enabled() -> None:
     with pytest.raises(ValidationError):
         AIProvidersConfig(
-            ollama={"enabled": True},
             openai={"enabled": True, "model": "gpt-4o-mini", "api_key": "abc"},
+            gemini={"enabled": True, "model": "gemini-1.5-flash", "api_key": "def"},
         )

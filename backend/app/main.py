@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Business Idea Validator API",
-    description="Analyze business ideas using multiple AI providers (Ollama, OpenAI, Azure, Gemini, Claude).",
+    description="Analyze business ideas using cloud AI providers (OpenAI, Azure, Gemini, Claude).",
     version="2.0.0",
 )
 
@@ -44,7 +44,7 @@ async def health():
 async def analyze_idea_endpoint(body: AnalyzeIdeaRequest):
     """
     Analyze a business idea. Returns market_potential, risks, first_steps, verdict.
-    Uses configured AI providers with automatic fallback to Ollama.
+    Uses the single selected provider.
     """
     try:
         result, provider_used, fallback_message = await analyze_idea(
