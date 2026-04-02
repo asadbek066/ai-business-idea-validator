@@ -12,6 +12,16 @@ const DEFAULT_PROVIDERS = {
   claude: { enabled: false, model: '', api_key: '' },
 };
 
+function stripApiKeys(config) {
+  const copy = JSON.parse(JSON.stringify(config || {}));
+  Object.keys(copy).forEach((name) => {
+    if (copy[name] && typeof copy[name] === 'object') {
+      copy[name].api_key = '';
+    }
+  });
+  return copy;
+}
+
 function normalizeProviders(saved) {
   const merged = {
     openai: { ...DEFAULT_PROVIDERS.openai, ...(saved?.openai || {}) },
@@ -46,7 +56,7 @@ export default function App() {
 
   const handleProviderChange = (newProviders) => {
     setProviders(newProviders);
-    localStorage.setItem('ai_providers', JSON.stringify(newProviders));
+    localStorage.setItem('ai_providers', JSON.stringify(stripApiKeys(newProviders)));
   };
 
   const handleSubmit = async (idea) => {
