@@ -179,9 +179,20 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
   const testApiKey = async () => {
     const config = localProviders[activeProvider];
-    if (!config.api_key && activeProvider !== 'ollama') {
-      setKeyStatus({ type: 'error', message: 'API key is required for cloud providers.' });
-      return;
+    if (activeProvider !== 'ollama') {
+      const missing = [];
+      if (!String(config.model || '').trim()) missing.push('model name');
+      if (!String(config.api_key || '').trim()) missing.push('API key');
+      if (activeProvider === 'azure_openai' && !String(config.endpoint || '').trim()) {
+        missing.push('endpoint URL');
+      }
+      if (missing.length > 0) {
+        setKeyStatus({
+          type: 'error',
+          message: `Please fill: ${missing.join(', ')}.`,
+        });
+        return;
+      }
     }
 
     setTestingKey(true);
@@ -400,7 +411,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
                 <button
                   type="button"
                   onClick={testApiKey}
-                  disabled={testingKey || !config.api_key}
+                  disabled={testingKey}
                   className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed text-stone-700"
                 >
                   {testingKey ? 'Testing...' : 'Test API Key'}
