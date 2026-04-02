@@ -1,5 +1,6 @@
-"""Multi-provider AI client with robust JSON parsing and fallback logic."""
+"""Multi-provider AI client with safe JSON parsing and fallback logic."""
 import json
+import logging
 import re
 from typing import List, Optional, Tuple
 import httpx
@@ -13,13 +14,13 @@ from .providers import (
 )
 from .schemas import AIProvidersConfig, ProviderConfig
 
+logger = logging.getLogger(__name__)
+
 
 def _print_raw_ai_output(raw: str) -> None:
     """Print raw AI response for debugging."""
     try:
-        print("[AI raw output]", "-" * 40)
-        print((raw or "")[:2000] + ("..." if len(raw or "") > 2000 else ""))
-        print("-" * 40)
+        logger.debug("[AI raw output] %s", (raw or "")[:2000] + ("..." if len(raw or "") > 2000 else ""))
     except Exception:
         pass
 
@@ -101,7 +102,7 @@ def _safe_json_loads(s: str) -> Optional[dict]:
 
 
 def _parse_json_response(text: str) -> Optional[dict]:
-    """Robust safe JSON extraction. Never raises."""
+    """Safe JSON extraction. Never raises."""
     if not text or not isinstance(text, str):
         return None
     text = text.strip()
@@ -216,7 +217,7 @@ def _safe_default_response(message: str = "Analysis could not be parsed. Please 
 
 
 def _extract_and_normalize(raw: str) -> dict:
-    """Robust safe extraction: try JSON, then section fallback. Always returns valid dict."""
+    """Try JSON first, then section fallback. Always returns a valid dict."""
     try:
         _print_raw_ai_output(raw)
     except Exception:
@@ -258,6 +259,9 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
     """
     if providers_config is None:
         providers_config = AIProvidersConfig()
+    idea = (idea or "").strip()
+    if not idea:
+        raise RuntimeError("Idea text is empty after normalization.")
     
     # Find the single enabled provider (only one should be enabled)
     primary_provider = None
@@ -268,7 +272,7 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
             primary_provider = OpenAIProvider(providers_config.openai.api_key, providers_config.openai.model)
             primary_name = "openai"
         else:
-            print("[Warning] OpenAI enabled but missing API key or model. Will use Ollama fallback.")
+            logger.warning("OpenAI enabled but missing API key or model. Will use Ollama fallback.")
     
     elif providers_config.azure_openai.enabled:
         if providers_config.azure_openai.api_key and providers_config.azure_openai.endpoint and providers_config.azure_openai.model:
@@ -279,21 +283,21 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
             )
             primary_name = "azure_openai"
         else:
-            print("[Warning] Azure OpenAI enabled but missing API key, endpoint, or model. Will use Ollama fallback.")
+            logger.warning("Azure OpenAI enabled but missing API key, endpoint, or model. Will use Ollama fallback.")
     
     elif providers_config.gemini.enabled:
         if providers_config.gemini.api_key and providers_config.gemini.model:
             primary_provider = GeminiProvider(providers_config.gemini.api_key, providers_config.gemini.model)
             primary_name = "gemini"
         else:
-            print("[Warning] Gemini enabled but missing API key or model. Will use Ollama fallback.")
+            logger.warning("Gemini enabled but missing API key or model. Will use Ollama fallback.")
     
     elif providers_config.claude.enabled:
         if providers_config.claude.api_key and providers_config.claude.model:
             primary_provider = ClaudeProvider(providers_config.claude.api_key, providers_config.claude.model)
             primary_name = "claude"
         else:
-            print("[Warning] Claude enabled but missing API key or model. Will use Ollama fallback.")
+            logger.warning("Claude enabled but missing API key or model. Will use Ollama fallback.")
     
     elif providers_config.ollama.enabled:
         ollama_url = providers_config.ollama.url or "http://localhost:11434"
@@ -302,18 +306,18 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
             primary_provider = OllamaProvider(ollama_url, ollama_model)
             primary_name = "ollama"
         else:
-            print("[Warning] Ollama enabled but not available. Will try to use it as fallback anyway.")
+            logger.warning("Ollama enabled but not available. Will try to use it as fallback anyway.")
     
     # Try primary provider first
     if primary_provider and primary_name:
         try:
-            print(f"[Trying primary provider] {primary_name}")
+            logger.info("Trying primary provider: %s", primary_name)
             raw_response, used_provider = await primary_provider.analyze(idea)
             result = _extract_and_normalize(raw_response)
-            print(f"[Success] Used provider: {used_provider}")
+            logger.info("Primary provider succeeded: %s", used_provider)
             return result, used_provider, None  # No fallback message
         except Exception as e:
-            print(f"[Primary provider failed] {primary_name}: {type(e).__name__}: {e}")
+            logger.warning("Primary provider failed (%s): %s: %s", primary_name, type(e).__name__, e)
             # Fall through to Ollama fallback
     
     # Ollama fallback (always try if available)
@@ -322,7 +326,7 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
     
     if await _check_ollama_available(ollama_url):
         try:
-            print(f"[Using Ollama fallback] URL: {ollama_url}, Model: {ollama_model}")
+            logger.info("Using Ollama fallback. url=%s model=%s", ollama_url, ollama_model)
             fallback_provider = OllamaProvider(ollama_url, ollama_model)
             raw_response, used_provider = await fallback_provider.analyze(idea)
             result = _extract_and_normalize(raw_response)
@@ -335,10 +339,10 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
             else:
                 fallback_msg = "No provider was configured. Using Ollama fallback."
             
-            print(f"[Success] Used Ollama fallback")
+            logger.info("Ollama fallback succeeded.")
             return result, "ollama", fallback_msg
         except Exception as e:
-            print(f"[Ollama fallback failed]: {type(e).__name__}: {e}")
+            logger.error("Ollama fallback failed: %s: %s", type(e).__name__, e)
             raise RuntimeError(
                 f"All AI providers failed. Primary provider ({primary_name or 'none'}) failed, "
                 f"and Ollama fallback also failed: {e}"

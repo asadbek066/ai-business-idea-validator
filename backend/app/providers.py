@@ -1,10 +1,13 @@
 """Multi-provider AI client abstraction."""
-import json
-import re
-from typing import Optional, Dict, Any
+import asyncio
+import logging
+from typing import Any
 from abc import ABC, abstractmethod
 import httpx
-from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, RESPONSE_KEYS
+from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+
+logger = logging.getLogger(__name__)
+HTTP_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=10)
 
 
 class AIProvider(ABC):
@@ -16,7 +19,32 @@ class AIProvider(ABC):
         Analyze business idea. Returns (response_text, provider_name).
         Raises exception on failure.
         """
-        pass
+        raise NotImplementedError
+
+    async def _post_json_with_retry(
+        self,
+        url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str] | None = None,
+        timeout_seconds: float = 60.0,
+        retries: int = 2,
+    ) -> dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout_seconds, limits=HTTP_LIMITS) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if not isinstance(data, dict):
+                        raise ValueError("Provider returned non-object JSON.")
+                    return data
+            except (httpx.HTTPError, ValueError) as error:
+                last_error = error
+                if attempt < retries:
+                    logger.warning("Provider request failed (attempt %s/%s): %s", attempt + 1, retries + 1, error)
+                    await asyncio.sleep(0.4 * (attempt + 1))
+        raise RuntimeError(f"Provider request failed after {retries + 1} attempts: {last_error}")
 
 
 class OllamaProvider(AIProvider):
@@ -37,10 +65,12 @@ class OllamaProvider(AIProvider):
             ],
             "stream": False,
         }
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            timeout_seconds=120.0,
+            retries=1,
+        )
         
         message = (data.get("message") or {}).get("content") or ""
         if not message:
@@ -67,10 +97,13 @@ class OpenAIProvider(AIProvider):
             ],
             "temperature": 0.6,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=60.0,
+            retries=1,
+        )
         
         message = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
         if not message:
@@ -97,10 +130,13 @@ class AzureOpenAIProvider(AIProvider):
             ],
             "temperature": 0.6,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=60.0,
+            retries=1,
+        )
         
         message = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
         if not message:
@@ -125,10 +161,12 @@ class GeminiProvider(AIProvider):
                 }]
             }]
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            timeout_seconds=60.0,
+            retries=1,
+        )
         
         candidates = data.get("candidates", [])
         if not candidates:
@@ -165,10 +203,13 @@ class ClaudeProvider(AIProvider):
                 "content": f"{SYSTEM_PROMPT}\n\n{USER_PROMPT_TEMPLATE.format(idea=idea)}"
             }]
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=60.0,
+            retries=1,
+        )
         
         content = data.get("content", [])
         if not content:
