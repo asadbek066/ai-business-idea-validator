@@ -9,7 +9,6 @@ class ProviderConfig(BaseModel):
     enabled: bool = False
     model: str = ""
     api_key: Optional[str] = None
-    url: Optional[str] = None  # For Ollama
     endpoint: Optional[str] = None  # For Azure OpenAI
 
     @field_validator("model", mode="before")
@@ -17,7 +16,7 @@ class ProviderConfig(BaseModel):
     def normalize_model(cls, value: str) -> str:
         return (value or "").strip()
 
-    @field_validator("api_key", "url", "endpoint", mode="before")
+    @field_validator("api_key", "endpoint", mode="before")
     @classmethod
     def normalize_optional_strings(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -25,7 +24,7 @@ class ProviderConfig(BaseModel):
         cleaned = value.strip()
         return cleaned or None
 
-    @field_validator("url", "endpoint")
+    @field_validator("endpoint")
     @classmethod
     def validate_http_url(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -37,7 +36,6 @@ class ProviderConfig(BaseModel):
 
 class AIProvidersConfig(BaseModel):
     """Configuration for all AI providers."""
-    ollama: ProviderConfig = ProviderConfig(enabled=True, url="http://localhost:11434")
     openai: ProviderConfig = ProviderConfig()
     azure_openai: ProviderConfig = ProviderConfig()
     gemini: ProviderConfig = ProviderConfig()
@@ -47,15 +45,14 @@ class AIProvidersConfig(BaseModel):
     def validate_single_enabled_provider(self) -> "AIProvidersConfig":
         enabled_count = sum(
             [
-                self.ollama.enabled,
                 self.openai.enabled,
                 self.azure_openai.enabled,
                 self.gemini.enabled,
                 self.claude.enabled,
             ]
         )
-        if enabled_count > 1:
-            raise ValueError("Enable only one AI provider at a time.")
+        if enabled_count != 1:
+            raise ValueError("Enable exactly one AI provider.")
         return self
 
 
@@ -80,4 +77,4 @@ class AnalyzeIdeaResponse(BaseModel):
     first_steps: str
     verdict: str
     provider_used: Optional[str] = None  # Which provider was actually used
-    fallback_message: Optional[str] = None  # Message if Ollama fallback was used
+    fallback_message: Optional[str] = None

@@ -47,37 +47,6 @@ class AIProvider(ABC):
         raise RuntimeError(f"Provider request failed after {retries + 1} attempts: {last_error}")
 
 
-class OllamaProvider(AIProvider):
-    """Ollama local provider."""
-    
-    def __init__(self, url: str, model: str):
-        self.url = url.rstrip('/')
-        self.model = model
-    
-    async def analyze(self, idea: str) -> tuple[str, str]:
-        """Call Ollama API."""
-        url = f"{self.url}/api/chat"
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(idea=idea)},
-            ],
-            "stream": False,
-        }
-        data = await self._post_json_with_retry(
-            url=url,
-            payload=payload,
-            timeout_seconds=120.0,
-            retries=1,
-        )
-        
-        message = (data.get("message") or {}).get("content") or ""
-        if not message:
-            raise ValueError("Empty response from Ollama")
-        return message, "ollama"
-
-
 class OpenAIProvider(AIProvider):
     """OpenAI provider."""
     

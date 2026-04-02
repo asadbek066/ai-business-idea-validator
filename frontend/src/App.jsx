@@ -6,12 +6,30 @@ import LoadingSpinner from './components/LoadingSpinner';
 import ProviderSettings from './components/ProviderSettings';
 
 const DEFAULT_PROVIDERS = {
-  ollama: { enabled: true, url: 'http://localhost:11434', model: 'qwen2.5:1.5b', api_key: null },
-  openai: { enabled: false, model: '', api_key: '' },
+  openai: { enabled: true, model: '', api_key: '' },
   azure_openai: { enabled: false, model: '', api_key: '', endpoint: '' },
   gemini: { enabled: false, model: '', api_key: '' },
   claude: { enabled: false, model: '', api_key: '' },
 };
+
+function normalizeProviders(saved) {
+  const merged = {
+    openai: { ...DEFAULT_PROVIDERS.openai, ...(saved?.openai || {}) },
+    azure_openai: { ...DEFAULT_PROVIDERS.azure_openai, ...(saved?.azure_openai || {}) },
+    gemini: { ...DEFAULT_PROVIDERS.gemini, ...(saved?.gemini || {}) },
+    claude: { ...DEFAULT_PROVIDERS.claude, ...(saved?.claude || {}) },
+  };
+  const enabledKeys = Object.entries(merged)
+    .filter(([, cfg]) => Boolean(cfg?.enabled))
+    .map(([name]) => name);
+  if (enabledKeys.length !== 1) {
+    Object.keys(merged).forEach((name) => {
+      merged[name].enabled = false;
+    });
+    merged.openai.enabled = true;
+  }
+  return merged;
+}
 
 export default function App() {
   const [loading, setLoading] = useState(false);
@@ -20,7 +38,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [providers, setProviders] = useState(() => {
     const saved = localStorage.getItem('ai_providers');
-    return saved ? JSON.parse(saved) : DEFAULT_PROVIDERS;
+    return saved ? normalizeProviders(JSON.parse(saved)) : DEFAULT_PROVIDERS;
   });
 
   const handleProviderChange = (newProviders) => {
