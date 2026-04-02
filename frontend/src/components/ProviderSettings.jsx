@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// Helper functions for localStorage history
-const getHistoryKey = (provider, field) => `ai_provider_history_${provider}_${field}`;
-const MAX_HISTORY = 10;
 const DRAFT_KEY = 'ai_providers_draft';
 const PROVIDER_ORDER = [
   { name: 'openai', label: 'OpenAI' },
@@ -10,27 +7,6 @@ const PROVIDER_ORDER = [
   { name: 'gemini', label: 'Google Gemini' },
   { name: 'claude', label: 'Anthropic Claude' },
 ];
-
-const getHistory = (provider, field) => {
-  try {
-    const stored = localStorage.getItem(getHistoryKey(provider, field));
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveToHistory = (provider, field, value) => {
-  if (!value || value.trim() === '') return;
-  try {
-    const history = getHistory(provider, field);
-    const filtered = history.filter(v => v !== value);
-    const updated = [value, ...filtered].slice(0, MAX_HISTORY);
-    localStorage.setItem(getHistoryKey(provider, field), JSON.stringify(updated));
-  } catch {
-    // Ignore localStorage errors
-  }
-};
 
 export default function ProviderSettings({ providers, onChange, onClose }) {
   const modalRef = useRef(null);
@@ -70,14 +46,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   });
   const [testingKey, setTestingKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState(null);
-  
-  // Autocomplete state
-  const [autocompleteState, setAutocompleteState] = useState({
-    field: null,
-    query: '',
-    suggestions: [],
-    selectedIndex: -1,
-  });
 
   // Click outside to close
   useEffect(() => {
@@ -115,7 +83,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     }
     setActiveProvider(providerName);
     setKeyStatus(null);
-    setAutocompleteState({ field: null, query: '', suggestions: [], selectedIndex: -1 });
   }, [localProviders]);
 
   const updateProviderField = useCallback((providerName, field, value) => {
@@ -135,27 +102,9 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
       return updated;
     });
     setKeyStatus(null);
-    
-    // Update autocomplete suggestions
-    if (field === 'model' || field === 'endpoint') {
-      const history = getHistory(providerName, field);
-      const filtered = history.filter(h => h.toLowerCase().includes(value.toLowerCase()));
-      setAutocompleteState(prev => ({
-        ...prev,
-        field: `${providerName}_${field}`,
-        query: value,
-        suggestions: filtered.slice(0, 5),
-        selectedIndex: -1,
-      }));
-    }
   }, []);
 
   const handleSave = useCallback(() => {
-    // Save current values to history
-    const config = localProviders[activeProvider];
-    if (config.model) saveToHistory(activeProvider, 'model', config.model);
-    if (config.endpoint) saveToHistory(activeProvider, 'endpoint', config.endpoint);
-    
     onChange(localProviders);
     try {
       localStorage.removeItem(DRAFT_KEY);
@@ -249,100 +198,6 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     }
   };
 
-  const handleInputFocus = (providerName, field) => {
-    const history = getHistory(providerName, field);
-    const currentValue = localProviders[providerName][field] || '';
-    const filtered = history.filter(h => 
-      h.toLowerCase().includes(currentValue.toLowerCase()) && h !== currentValue
-    );
-    setAutocompleteState({
-      field: `${providerName}_${field}`,
-      query: currentValue,
-      suggestions: filtered.slice(0, 5),
-      selectedIndex: -1,
-    });
-  };
-
-  const handleInputBlur = () => {
-    // Delay closing autocomplete to allow click on suggestion
-    setTimeout(() => {
-      setAutocompleteState({ field: null, query: '', suggestions: [], selectedIndex: -1 });
-    }, 200);
-  };
-
-  const selectSuggestion = (providerName, field, value) => {
-    updateProviderField(providerName, field, value);
-    setAutocompleteState({ field: null, query: '', suggestions: [], selectedIndex: -1 });
-  };
-
-  const handleInputKeyDown = (e, providerName, field) => {
-    const { suggestions, selectedIndex } = autocompleteState;
-    if (autocompleteState.field !== `${providerName}_${field}`) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setAutocompleteState(prev => ({
-        ...prev,
-        selectedIndex: Math.min(prev.selectedIndex + 1, suggestions.length - 1),
-      }));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setAutocompleteState(prev => ({
-        ...prev,
-        selectedIndex: Math.max(prev.selectedIndex - 1, -1),
-      }));
-    } else if (e.key === 'Enter' && selectedIndex >= 0 && suggestions[selectedIndex]) {
-      e.preventDefault();
-      selectSuggestion(providerName, field, suggestions[selectedIndex]);
-    } else if (e.key === 'Escape') {
-      setAutocompleteState({ field: null, query: '', suggestions: [], selectedIndex: -1 });
-    }
-  };
-
-  const AutocompleteInput = ({ providerName, field, value, onChange, placeholder, type = 'text', required = false }) => {
-    const inputRef = useRef(null);
-    const dropdownRef = useRef(null);
-    const isActive = autocompleteState.field === `${providerName}_${field}`;
-    const suggestions = isActive ? autocompleteState.suggestions : [];
-
-    return (
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type={type}
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => handleInputFocus(providerName, field)}
-          onBlur={handleInputBlur}
-          onKeyDown={(e) => handleInputKeyDown(e, providerName, field)}
-          placeholder={placeholder}
-          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-          required={required}
-        />
-        {suggestions.length > 0 && (
-          <div
-            ref={dropdownRef}
-            className="absolute z-10 w-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-40 overflow-y-auto"
-            onMouseDown={(e) => e.preventDefault()} // Prevent blur
-          >
-            {suggestions.map((suggestion, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => selectSuggestion(providerName, field, suggestion)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-amber-50 transition-colors ${
-                  idx === autocompleteState.selectedIndex ? 'bg-amber-50' : ''
-                }`}
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const ProviderOption = ({ name, label }) => {
     const isSelected = activeProvider === name;
     const config = localProviders[name];
@@ -385,17 +240,17 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Model Name <span className="text-red-500">*</span>
               </label>
-              <AutocompleteInput
-                providerName={name}
-                field="model"
+              <input
+                type="text"
                 value={config?.model ?? ''}
-                onChange={(value) => updateProviderField(name, 'model', value)}
+                onChange={(e) => updateProviderField(name, 'model', e.target.value)}
                 placeholder={
                   name === 'openai' ? 'gpt-4o-mini' :
                   name === 'claude' ? 'claude-3-haiku-20240307' :
                   name === 'gemini' ? 'gemini-pro' :
                   'your-model-name'
                 }
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 required
               />
             </div>
@@ -426,12 +281,12 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
                 <label className="block text-sm font-medium text-stone-700 mb-1">
                   Endpoint URL <span className="text-red-500">*</span>
                 </label>
-                <AutocompleteInput
-                  providerName={name}
-                  field="endpoint"
+                <input
+                  type="text"
                   value={config?.endpoint ?? ''}
-                  onChange={(value) => updateProviderField(name, 'endpoint', value)}
+                  onChange={(e) => updateProviderField(name, 'endpoint', e.target.value)}
                   placeholder="https://your-resource.openai.azure.com"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                   required
                 />
               </div>
