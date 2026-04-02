@@ -1,10 +1,17 @@
 """FastAPI app: POST /analyze-idea with multi-provider AI support."""
 import os
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import AnalyzeIdeaRequest, AnalyzeIdeaResponse
 from .ai_clients import analyze_idea
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Business Idea Validator API",
@@ -13,7 +20,11 @@ app = FastAPI(
 )
 
 # CORS: allow frontend origins (Vite dev + production)
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -37,7 +48,7 @@ async def analyze_idea_endpoint(body: AnalyzeIdeaRequest):
     """
     try:
         result, provider_used, fallback_message = await analyze_idea(
-            body.idea.strip(),
+            body.idea,
             providers_config=body.ai_providers
         )
         
@@ -54,12 +65,10 @@ async def analyze_idea_endpoint(body: AnalyzeIdeaRequest):
             fallback_message=fallback_message,
         )
     except RuntimeError as e:
+        logger.warning("Provider pipeline failed: %s", e)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        # Log error with full traceback for debugging
-        import traceback
-        print(f"[Error in analyze_idea_endpoint] {type(e).__name__}: {e}")
-        traceback.print_exc()
+        logger.exception("Unexpected error in analyze_idea endpoint.")
         return AnalyzeIdeaResponse(
             market_potential="Analysis temporarily unavailable. Please try again.",
             risks="",

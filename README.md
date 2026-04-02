@@ -20,8 +20,8 @@ The UI supports dynamic AI provider selection. Cloud providers are optional and 
 - **Single active provider**: choose one of Ollama, OpenAI, Azure OpenAI, Gemini, or Claude.
 - **User-supplied models and keys**: model name is typed by the user; cloud keys are entered in the UI.
 - **Automatic fallback**: if a cloud provider is misconfigured or fails, the backend falls back to Ollama (when available).
-- **Robust output parsing**: the backend safely extracts JSON even when the model returns imperfect output.
-- **Clean UX**: responsive UI, loading state, errors, and results in clear sections.
+- **Safe output parsing**: the backend extracts JSON and handles imperfect model output without crashing.
+- **Simple UI flow**: loading state, clear errors, and structured result sections.
 
 ## Architecture
 
@@ -33,8 +33,8 @@ Key backend modules:
 
 - `backend/app/main.py`: API entrypoint (`POST /analyze-idea`)
 - `backend/app/providers.py`: provider clients (Ollama/OpenAI/Azure/Gemini/Claude)
-- `backend/app/ai_clients.py`: provider selection + fallback + robust JSON extraction
-- `backend/app/prompts.py`: mentor-style JSON-only prompt
+- `backend/app/ai_clients.py`: provider selection + fallback + safe JSON extraction
+- `backend/app/prompts.py`: prompt template and required JSON response shape
 
 ## Design decisions & tradeoffs
 
