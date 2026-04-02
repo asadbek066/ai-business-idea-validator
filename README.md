@@ -2,8 +2,7 @@
 
 ## Live
 
-- Frontend: https://ai-business-idea-validator-frontend.vercel.app
-- Backend API: https://ai-business-idea-validator.onrender.com
+- Demo: https://ai-business-idea-validator-frontend.vercel.app
 
 ## Problem
 
