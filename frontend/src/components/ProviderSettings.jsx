@@ -351,12 +351,20 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   const ProviderOption = ({ name, label }) => {
     const isSelected = activeProvider === name;
     const config = localProviders[name];
+    const selectProvider = () => handleProviderChange(name);
 
     return (
       <div className="space-y-3" key={name}>
-        <button
-          type="button"
-          onClick={() => handleProviderChange(name)}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={selectProvider}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectProvider();
+            }
+          }}
           className="w-full flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-colors hover:bg-stone-50 text-left"
           style={{ borderColor: isSelected ? '#f59e0b' : '#e5e7eb' }}
         >
@@ -365,7 +373,8 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
             name="ai_provider"
             value={name}
             checked={isSelected}
-            onChange={() => handleProviderChange(name)}
+            onChange={selectProvider}
+            onClick={(e) => e.stopPropagation()}
             className="w-4 h-4 text-amber-500 focus:ring-amber-500"
             aria-label={`${label} provider`}
           />
@@ -373,7 +382,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
           <span className="text-xs text-stone-500">
             {isSelected ? 'Selected' : 'Select'}
           </span>
-        </button>
+        </div>
 
         {isSelected && (
           <div className="ml-7 space-y-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
