@@ -30,6 +30,10 @@ copy .env.example .env   # Windows
 # cp .env.example .env   # macOS/Linux
 ```
 
+Azure OpenAI users can set:
+
+- `AZURE_OPENAI_API_VERSION` (default: `2025-01-01-preview`)
+
 ## Run locally
 
 Start the backend from the `backend` folder:
