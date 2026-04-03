@@ -4,8 +4,13 @@ import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas import AnalyzeIdeaRequest, AnalyzeIdeaResponse
-from .ai_clients import analyze_idea
+from .schemas import (
+    AnalyzeIdeaRequest,
+    AnalyzeIdeaResponse,
+    ValidateProviderRequest,
+    ValidateProviderResponse,
+)
+from .ai_clients import analyze_idea, validate_provider
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -77,6 +82,24 @@ async def analyze_idea_endpoint(body: AnalyzeIdeaRequest):
             provider_used=None,
             fallback_message=None,
         )
+
+
+@app.post("/validate-provider", response_model=ValidateProviderResponse)
+async def validate_provider_endpoint(body: ValidateProviderRequest):
+    """Validate selected provider credentials/connectivity quickly."""
+    try:
+        ok, provider_used = await validate_provider(body.ai_providers)
+        return ValidateProviderResponse(
+            ok=ok,
+            provider_used=provider_used,
+            message="Provider configuration is valid.",
+        )
+    except RuntimeError as e:
+        logger.warning("Provider validation failed: %s", e)
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception:
+        logger.exception("Unexpected error in validate_provider endpoint.")
+        raise HTTPException(status_code=500, detail="Provider validation failed.")
 
 
 if __name__ == "__main__":

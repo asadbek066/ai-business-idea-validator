@@ -251,44 +251,7 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
     if not idea:
         raise RuntimeError("Idea text is empty after normalization.")
     
-    # Exactly one provider should be enabled (validated by schema).
-    primary_provider = None
-    primary_name = None
-    
-    if providers_config.openai.enabled:
-        if providers_config.openai.api_key and providers_config.openai.model:
-            primary_provider = OpenAIProvider(providers_config.openai.api_key, providers_config.openai.model)
-            primary_name = "openai"
-        else:
-            raise RuntimeError("OpenAI is enabled but missing API key or model.")
-    
-    elif providers_config.azure_openai.enabled:
-        if providers_config.azure_openai.api_key and providers_config.azure_openai.endpoint and providers_config.azure_openai.model:
-            primary_provider = AzureOpenAIProvider(
-                providers_config.azure_openai.endpoint,
-                providers_config.azure_openai.api_key,
-                providers_config.azure_openai.model
-            )
-            primary_name = "azure_openai"
-        else:
-            raise RuntimeError("Azure OpenAI is enabled but missing API key, endpoint, or model.")
-    
-    elif providers_config.gemini.enabled:
-        if providers_config.gemini.api_key and providers_config.gemini.model:
-            primary_provider = GeminiProvider(providers_config.gemini.api_key, providers_config.gemini.model)
-            primary_name = "gemini"
-        else:
-            raise RuntimeError("Gemini is enabled but missing API key or model.")
-    
-    elif providers_config.claude.enabled:
-        if providers_config.claude.api_key and providers_config.claude.model:
-            primary_provider = ClaudeProvider(providers_config.claude.api_key, providers_config.claude.model)
-            primary_name = "claude"
-        else:
-            raise RuntimeError("Claude is enabled but missing API key or model.")
-
-    if not primary_provider or not primary_name:
-        raise RuntimeError("No AI provider configured. Enable one provider and add model + API key.")
+    primary_provider, primary_name = _get_selected_provider(providers_config)
 
     try:
         logger.info("Trying provider: %s", primary_name)
@@ -299,3 +262,46 @@ async def analyze_idea(idea: str, providers_config: Optional[AIProvidersConfig] 
     except Exception as e:
         logger.warning("Provider failed (%s): %s: %s", primary_name, type(e).__name__, e)
         raise RuntimeError(f"{primary_name} provider failed: {e}")
+
+
+def _get_selected_provider(providers_config: AIProvidersConfig):
+    if providers_config.openai.enabled:
+        if providers_config.openai.api_key and providers_config.openai.model:
+            return OpenAIProvider(providers_config.openai.api_key, providers_config.openai.model), "openai"
+        raise RuntimeError("OpenAI is enabled but missing API key or model.")
+
+    if providers_config.azure_openai.enabled:
+        if providers_config.azure_openai.api_key and providers_config.azure_openai.endpoint and providers_config.azure_openai.model:
+            return (
+                AzureOpenAIProvider(
+                    providers_config.azure_openai.endpoint,
+                    providers_config.azure_openai.api_key,
+                    providers_config.azure_openai.model,
+                ),
+                "azure_openai",
+            )
+        raise RuntimeError("Azure OpenAI is enabled but missing API key, endpoint, or model.")
+
+    if providers_config.gemini.enabled:
+        if providers_config.gemini.api_key and providers_config.gemini.model:
+            return GeminiProvider(providers_config.gemini.api_key, providers_config.gemini.model), "gemini"
+        raise RuntimeError("Gemini is enabled but missing API key or model.")
+
+    if providers_config.claude.enabled:
+        if providers_config.claude.api_key and providers_config.claude.model:
+            return ClaudeProvider(providers_config.claude.api_key, providers_config.claude.model), "claude"
+        raise RuntimeError("Claude is enabled but missing API key or model.")
+
+    raise RuntimeError("No AI provider configured. Enable one provider and add model + API key.")
+
+
+async def validate_provider(providers_config: Optional[AIProvidersConfig] = None) -> Tuple[bool, str]:
+    if providers_config is None:
+        providers_config = AIProvidersConfig()
+    provider, provider_name = _get_selected_provider(providers_config)
+    try:
+        ok, used = await provider.validate()
+        return ok, used or provider_name
+    except Exception as e:
+        logger.warning("Provider validation failed (%s): %s: %s", provider_name, type(e).__name__, e)
+        raise RuntimeError(f"{provider_name} validation failed: {e}")

@@ -260,14 +260,17 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
     setTestingKey(true);
     setKeyStatus(null);
+    let timeoutId;
 
     try {
       const API_BASE = import.meta.env.VITE_API_URL || '/api';
-      const res = await fetch(`${API_BASE}/analyze-idea`, {
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${API_BASE}/validate-provider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          idea: 'Test business idea',
           ai_providers: {
             ...Object.fromEntries(
               Object.entries(localProviders).map(([name, cfg]) => [
@@ -278,18 +281,29 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
           },
         }),
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json();
 
-      if (res.ok && data.provider_used === activeProvider) {
+      if (res.ok && data.ok && data.provider_used === activeProvider) {
         setKeyStatus({ type: 'success', message: 'API key is valid.' });
       } else {
         const detail = data.detail || `HTTP ${res.status}`;
         setKeyStatus({ type: 'error', message: `Provider test failed: ${detail}` });
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        setKeyStatus({
+          type: 'error',
+          message: 'Provider test timed out. Check endpoint/network and try again.',
+        });
+        return;
+      }
       setKeyStatus({ type: 'error', message: `Failed to test API key: ${error.message}` });
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       setTestingKey(false);
     }
   };
