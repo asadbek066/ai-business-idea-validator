@@ -78,3 +78,15 @@ class AnalyzeIdeaResponse(BaseModel):
     verdict: str
     provider_used: Optional[str] = None  # Which provider was actually used
     fallback_message: Optional[str] = None
+
+
+class ValidateProviderRequest(BaseModel):
+    """Request body for POST /validate-provider."""
+    ai_providers: AIProvidersConfig
+
+
+class ValidateProviderResponse(BaseModel):
+    """Response for provider validation endpoint."""
+    ok: bool
+    provider_used: str
+    message: str

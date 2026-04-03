@@ -22,6 +22,14 @@ class AIProvider(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    async def validate(self) -> tuple[bool, str]:
+        """
+        Validate provider credentials/connectivity quickly.
+        Returns (is_valid, provider_name). Raises on failure.
+        """
+        raise NotImplementedError
+
     async def _post_json_with_retry(
         self,
         url: str,
@@ -80,6 +88,24 @@ class OpenAIProvider(AIProvider):
             raise ValueError("Empty response from OpenAI")
         return message, "openai"
 
+    async def validate(self) -> tuple[bool, str]:
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "temperature": 0,
+        }
+        await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=5.0,
+            retries=0,
+        )
+        return True, "openai"
+
 
 class AzureOpenAIProvider(AIProvider):
     """Azure OpenAI provider."""
@@ -121,6 +147,26 @@ class AzureOpenAIProvider(AIProvider):
             raise ValueError("Empty response from Azure OpenAI")
         return message, "azure_openai"
 
+    async def validate(self) -> tuple[bool, str]:
+        url = (
+            f"{self.endpoint}/openai/deployments/{self.model}/chat/completions"
+            f"?api-version={self.api_version}"
+        )
+        headers = {"api-key": self.api_key}
+        payload = {
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "temperature": 0,
+        }
+        await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=6.0,
+            retries=0,
+        )
+        return True, "azure_openai"
+
 
 class GeminiProvider(AIProvider):
     """Google Gemini provider."""
@@ -156,6 +202,19 @@ class GeminiProvider(AIProvider):
         if not message:
             raise ValueError("Empty response from Gemini")
         return message, "gemini"
+
+    async def validate(self) -> tuple[bool, str]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": "ping"}]}]
+        }
+        await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            timeout_seconds=6.0,
+            retries=0,
+        )
+        return True, "gemini"
 
 
 class ClaudeProvider(AIProvider):
@@ -196,3 +255,24 @@ class ClaudeProvider(AIProvider):
         if not message:
             raise ValueError("Empty response from Claude")
         return message, "claude"
+
+    async def validate(self) -> tuple[bool, str]:
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "ping"}],
+        }
+        await self._post_json_with_retry(
+            url=url,
+            payload=payload,
+            headers=headers,
+            timeout_seconds=6.0,
+            retries=0,
+        )
+        return True, "claude"
