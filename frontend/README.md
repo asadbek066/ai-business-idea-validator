@@ -9,6 +9,9 @@ cd frontend
 npm install
 ```
 
+Copy `.env.example` when a direct backend URL is needed; leave
+`VITE_API_URL` empty when using the Vite development proxy.
+
 ## Run locally
 
 1. **Backend** must be running (e.g. `cd backend && uvicorn app.main:app --reload --port 8000`).
@@ -26,7 +29,10 @@ npm install
 npm run build
 ```
 
-Output is in `dist/`. For production, set `VITE_API_URL` to your backend URL (e.g. `https://your-app.onrender.com`) before building.
+Output is in `dist/`. For production, set `VITE_API_URL` to an HTTPS backend
+URL (e.g. `https://your-app.onrender.com`) before building. The client sends
+only the currently selected provider configuration; disabled provider keys are
+not posted.
 
 ## Environment
 

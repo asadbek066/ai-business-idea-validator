@@ -26,6 +26,8 @@ The UI supports dynamic cloud provider selection. Providers are configured by th
 - **Safe output parsing**: the backend extracts JSON and handles imperfect model output without crashing.
 - **Simple UI flow**: loading state, clear errors, and structured result sections.
 - **Configurable Azure API version**: uses `AZURE_OPENAI_API_VERSION` on the backend.
+- **Bounded public API**: request-size and process-local rate limits protect the
+  unauthenticated analysis endpoints from accidental or abusive overload.
 
 ## Architecture
 
@@ -46,6 +48,9 @@ Key backend modules:
 - **No key persistence in localStorage**: keys stay in memory for the current tab session.
 - **Best-effort JSON repair**: the parser prefers strict JSON but includes extraction/repair to handle small local models that often produce imperfect JSON.
 - **No hidden fallback**: selected provider fails fast with a clear error, which keeps production behavior predictable.
+- **Provider boundary checks**: Azure endpoints must be HTTPS Azure OpenAI
+  resource hosts; provider responses and errors are bounded and public errors
+  never include request URLs or credentials.
 
 ## Security & configuration
 
@@ -53,6 +58,11 @@ Key backend modules:
 - Backend config is minimal:
   - `CORS_ORIGINS` (comma-separated allowlist)
   - `AZURE_OPENAI_API_VERSION` (default: `2025-01-01-preview`)
+  - `RATE_LIMIT_*` settings for the process-local abuse guard
+- The backend expects an explicit `ai_providers` object with exactly one
+  enabled provider. It does not have a server-side API-key fallback.
+- The process-local limiter is not a substitute for a shared gateway limiter
+  when running multiple public instances.
 
 See `backend/.env.example`.
 
@@ -77,7 +87,7 @@ See `backend/.env.example`.
 cd backend
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 copy .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```

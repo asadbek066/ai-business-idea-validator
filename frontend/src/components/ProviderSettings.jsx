@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { validateProvider } from '../api';
 
 const DRAFT_KEY = 'ai_providers_draft';
 const PROVIDER_ORDER = [
@@ -31,32 +32,24 @@ function ProviderOption({
 }) {
   return (
     <div className="space-y-3" key={name}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
+      <label
+        htmlFor={`provider-${name}`}
         className="w-full flex items-center gap-3 cursor-pointer p-3 rounded-lg border-2 transition-colors hover:bg-stone-50 text-left"
         style={{ borderColor: isSelected ? '#f59e0b' : '#e5e7eb' }}
       >
         <input
+          id={`provider-${name}`}
           type="radio"
           name="ai_provider"
           value={name}
           checked={isSelected}
           onChange={onSelect}
-          onClick={(e) => e.stopPropagation()}
           className="w-4 h-4 text-amber-500 focus:ring-amber-500"
           aria-label={`${label} provider`}
         />
         <span className="font-medium text-stone-800 flex-1">{label}</span>
         <span className="text-xs text-stone-500">{isSelected ? 'Selected' : 'Select'}</span>
-      </div>
+      </label>
 
       {isSelected && (
         <div className="ml-7 space-y-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
@@ -68,6 +61,7 @@ function ProviderOption({
               type="text"
               value={config?.model ?? ''}
               onChange={(e) => onUpdateField(name, 'model', e.target.value)}
+              maxLength={128}
               placeholder={
                 name === 'openai' ? 'gpt-4o-mini' :
                 name === 'claude' ? 'claude-3-haiku-20240307' :
@@ -88,12 +82,15 @@ function ProviderOption({
               value={config?.api_key ?? ''}
               onChange={(e) => onUpdateField(name, 'api_key', e.target.value)}
               placeholder="Enter your API key"
+              autoComplete="new-password"
+              maxLength={512}
               className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
               required
             />
             <button
               type="button"
               onClick={onTestApiKey}
+              disabled={testingKey}
               className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
             >
               {testingKey ? 'Testing...' : 'Test API Key'}
@@ -110,6 +107,7 @@ function ProviderOption({
                 value={config?.endpoint ?? ''}
                 onChange={(e) => onUpdateField(name, 'endpoint', e.target.value)}
                 placeholder="https://your-resource.openai.azure.com"
+                maxLength={512}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 required
               />
@@ -121,7 +119,7 @@ function ProviderOption({
               keyStatus.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
               keyStatus.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
               'bg-yellow-50 text-yellow-800 border border-yellow-200'
-            }`}>
+            }`} role="status" aria-live="polite">
               {keyStatus.message}
             </div>
           )}
@@ -133,6 +131,7 @@ function ProviderOption({
 
 export default function ProviderSettings({ providers, onChange, onClose }) {
   const modalRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const [activeProvider, setActiveProvider] = useState(() => {
     for (const [name, config] of Object.entries(providers)) {
       if (config.enabled) return name;
@@ -168,22 +167,55 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   const [keyStatus, setKeyStatus] = useState(null);
 
   useEffect(() => {
+    const previousActiveElement = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousActiveElement instanceof HTMLElement) {
+        previousActiveElement.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         onClose();
       }
     };
-    const handleEscape = (event) => {
+    const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+      if (event.key !== 'Tab') {
+        return;
+      }
+      const focusable = modalRef.current?.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
 
@@ -260,50 +292,18 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
     setTestingKey(true);
     setKeyStatus(null);
-    let timeoutId;
 
     try {
-      const API_BASE = import.meta.env.VITE_API_URL || '/api';
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`${API_BASE}/validate-provider`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          ai_providers: {
-            ...Object.fromEntries(
-              Object.entries(localProviders).map(([name, cfg]) => [
-                name,
-                name === activeProvider ? cfg : { ...cfg, enabled: false },
-              ])
-            ),
-          },
-        }),
-      });
-      clearTimeout(timeoutId);
+      const data = await validateProvider(localProviders);
 
-      const data = await res.json();
-
-      if (res.ok && data.ok && data.provider_used === activeProvider) {
+      if (data.ok && data.provider_used === activeProvider) {
         setKeyStatus({ type: 'success', message: 'API key is valid.' });
       } else {
-        const detail = data.detail || `HTTP ${res.status}`;
-        setKeyStatus({ type: 'error', message: `Provider test failed: ${detail}` });
+        setKeyStatus({ type: 'error', message: 'Provider test failed.' });
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
-        setKeyStatus({
-          type: 'error',
-          message: 'Provider test timed out. Check endpoint/network and try again.',
-        });
-        return;
-      }
       setKeyStatus({ type: 'error', message: `Failed to test API key: ${error.message}` });
     } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       setTestingKey(false);
     }
   };
@@ -312,12 +312,17 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="provider-settings-title"
+        aria-describedby="provider-settings-description"
         className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-stone-800">Provider Settings</h2>
+          <h2 id="provider-settings-title" className="text-xl font-bold text-stone-800">Provider Settings</h2>
           <button
+            ref={closeButtonRef}
             onClick={handleCancel}
             className="text-stone-400 hover:text-stone-600 text-2xl leading-none transition-colors"
             aria-label="Close"
@@ -327,14 +332,15 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         </div>
 
         <div className="p-6 space-y-4">
-          <p className="text-sm text-stone-600">
+          <p id="provider-settings-description" className="text-sm text-stone-600">
             Choose one provider for this session.
           </p>
           <p className="text-xs text-stone-500">
             Save applies changes. Cancel closes without saving.
           </p>
 
-          <div className="space-y-3">
+          <fieldset className="space-y-3">
+            <legend className="sr-only">AI provider</legend>
             {PROVIDER_ORDER.map((p) => (
               <ProviderOption
                 key={p.name}
@@ -349,7 +355,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
                 keyStatus={activeProvider === p.name ? keyStatus : null}
               />
             ))}
-          </div>
+          </fieldset>
 
           <div className="pt-4 border-t border-stone-200 flex gap-3">
             <button
