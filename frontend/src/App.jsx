@@ -44,19 +44,30 @@ function normalizeProviders(saved) {
   return merged;
 }
 
+function loadProviders() {
+  try {
+    const saved = localStorage.getItem('ai_providers');
+    return saved ? normalizeProviders(JSON.parse(saved)) : normalizeProviders(null);
+  } catch {
+    // Corrupt or unavailable browser storage must not prevent first use.
+    return normalizeProviders(null);
+  }
+}
+
 export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [providers, setProviders] = useState(() => {
-    const saved = localStorage.getItem('ai_providers');
-    return saved ? normalizeProviders(JSON.parse(saved)) : DEFAULT_PROVIDERS;
-  });
+  const [providers, setProviders] = useState(loadProviders);
 
   const handleProviderChange = (newProviders) => {
     setProviders(newProviders);
-    localStorage.setItem('ai_providers', JSON.stringify(stripApiKeys(newProviders)));
+    try {
+      localStorage.setItem('ai_providers', JSON.stringify(stripApiKeys(newProviders)));
+    } catch {
+      // Settings still apply for this tab if storage is unavailable.
+    }
   };
 
   const handleSubmit = async (idea) => {

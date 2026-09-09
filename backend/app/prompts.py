@@ -1,5 +1,4 @@
 """Structured prompts for business idea analysis."""
-from typing import List, Tuple
 
 SYSTEM_PROMPT = """You are a friendly startup mentor. You give clear, honest feedback on business ideas. Your tone is positive but realistic—casual and professional, like a founder who's been there.
 
@@ -32,9 +31,9 @@ Business idea:
 {idea}
 """
 
-RESPONSE_KEYS: List[str] = ["market_potential", "risks", "first_steps", "verdict"]
+RESPONSE_KEYS: list[str] = ["market_potential", "risks", "first_steps", "verdict"]
 
-SECTION_LABELS: List[Tuple[str, str]] = [
+SECTION_LABELS: list[tuple[str, str]] = [
     ("market_potential", "Market Potential"),
     ("risks", "Risks"),
     ("first_steps", "First Steps"),
