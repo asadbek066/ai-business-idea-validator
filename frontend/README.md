@@ -6,7 +6,7 @@ React + Vite + Tailwind UI for the AI Business Idea Validator.
 
 ```bash
 cd frontend
-npm install
+npm ci
 ```
 
 Copy `.env.example` when a direct backend URL is needed; leave
@@ -14,7 +14,7 @@ Copy `.env.example` when a direct backend URL is needed; leave
 
 ## Run locally
 
-1. **Backend** must be running (e.g. `cd backend && uvicorn app.main:app --reload --port 8000`).
+1. **Backend** must be running (e.g. `cd backend && uvicorn app.main:app --reload --port 8000 --env-file .env`).
 2. Start the dev server (uses Vite proxy so `/api` hits the backend):
 
    ```bash
@@ -27,12 +27,19 @@ Copy `.env.example` when a direct backend URL is needed; leave
 
 ```bash
 npm run build
+npm test
+npm run lint
 ```
 
 Output is in `dist/`. For production, set `VITE_API_URL` to an HTTPS backend
 URL (e.g. `https://your-app.onrender.com`) before building. The client sends
 only the currently selected provider configuration; disabled provider keys are
-not posted.
+not posted. Persisted settings never contain API-key values; keys remain in
+the current tab's memory.
+
+The Vite 8 toolchain requires Node 22.12+ (or Node 20.19+), and the current
+ESLint toolchain requires Node 22.13+ on the Node 22 line. The project
+declares Node 22.13+ as its supported floor and uses Node 24 in CI.
 
 ## Environment
 

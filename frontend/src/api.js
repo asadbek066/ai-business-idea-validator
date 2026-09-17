@@ -1,39 +1,43 @@
-/** Backend API client for the provider-backed analysis flow. */
+import { activeProviderConfig, activeProviderName } from './providerConfig';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
-const PROVIDER_NAMES = ['openai', 'azure_openai', 'gemini', 'claude'];
 
-function activeProviderName(providersConfig) {
-  return PROVIDER_NAMES.find((name) => providersConfig?.[name]?.enabled) || null;
-}
-
-/** Send only the selected provider configuration to the backend. */
-export function activeProviderConfig(providersConfig) {
-  const activeName = activeProviderName(providersConfig);
-  return Object.fromEntries(PROVIDER_NAMES.map((name) => {
-    const config = providersConfig?.[name] || {};
-    if (name !== activeName) {
-      return [name, { enabled: false, model: '', api_key: '', endpoint: '' }];
-    }
-    return [name, {
-      enabled: true,
-      model: String(config.model || ''),
-      api_key: String(config.api_key || ''),
-      endpoint: String(config.endpoint || ''),
-    }];
-  }));
-}
-
-function responseError(data, response) {
+export function responseError(data, response) {
   if (Array.isArray(data?.detail)) {
-    return data.detail.map((item) => item?.msg || 'Invalid request').join(', ');
+    return data.detail.map((item) => {
+      if (typeof item === 'string') return item;
+      const message = item?.msg || item?.message || 'Invalid request';
+      const location = Array.isArray(item?.loc) ? item.loc.filter(Boolean).join('.') : '';
+      return location ? `${location}: ${message}` : message;
+    }).join(', ');
   }
-  return data?.detail || response.statusText || `Request failed (${response.status})`;
+  if (typeof data?.detail === 'string' && data.detail) return data.detail;
+  return response.statusText || `Request failed (${response.status})`;
 }
 
-async function postJson(path, body, timeoutMs) {
+function cancelledError(cause) {
+  const error = new Error('Request cancelled.', { cause });
+  error.name = 'AbortError';
+  return error;
+}
+
+async function postJson(path, body, { timeoutMs, signal }) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let externalAbortHandler;
+  let timedOut = false;
+
+  const timeoutHandler = () => {
+    timedOut = true;
+    controller.abort();
+  };
+  const timerId = setTimeout(timeoutHandler, timeoutMs);
+
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    externalAbortHandler = () => controller.abort();
+    signal.addEventListener('abort', externalAbortHandler, { once: true });
+  }
+
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
@@ -47,16 +51,27 @@ async function postJson(path, body, timeoutMs) {
     }
     return data;
   } catch (error) {
+    if (timedOut) {
+      throw new Error('The request timed out. Check the backend and try again.', {
+        cause: error,
+      });
+    }
+    if (signal?.aborted) {
+      throw cancelledError(error);
+    }
     if (error?.name === 'AbortError') {
-      throw new Error('The request timed out. Check the backend and try again.');
+      throw cancelledError(error);
     }
     throw error;
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timerId);
+    if (signal && externalAbortHandler) {
+      signal.removeEventListener('abort', externalAbortHandler);
+    }
   }
 }
 
-export async function analyzeIdea(idea, providersConfig) {
+export async function analyzeIdea(idea, providersConfig, options = {}) {
   const normalizedIdea = String(idea || '').trim();
   if (!normalizedIdea) {
     throw new Error('Enter a business idea first.');
@@ -67,17 +82,17 @@ export async function analyzeIdea(idea, providersConfig) {
   return postJson(
     '/analyze-idea',
     { idea: normalizedIdea, ai_providers: activeProviderConfig(providersConfig) },
-    90_000,
+    { timeoutMs: 90_000, signal: options.signal },
   );
 }
 
-export async function validateProvider(providersConfig) {
+export async function validateProvider(providersConfig, options = {}) {
   if (!activeProviderName(providersConfig)) {
     throw new Error('Choose one AI provider in Settings first.');
   }
   return postJson(
     '/validate-provider',
     { ai_providers: activeProviderConfig(providersConfig) },
-    8_000,
+    { timeoutMs: 15_000, signal: options.signal },
   );
 }

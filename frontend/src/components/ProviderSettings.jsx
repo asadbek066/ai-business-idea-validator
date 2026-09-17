@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { validateProvider } from '../api';
+import {
+  activeProviderName,
+  mergeDraftProviders,
+  normalizeProviders,
+  stripApiKeys,
+} from '../providerConfig';
 
 const DRAFT_KEY = 'ai_providers_draft';
 const PROVIDER_ORDER = [
@@ -8,16 +14,6 @@ const PROVIDER_ORDER = [
   { name: 'gemini', label: 'Google Gemini' },
   { name: 'claude', label: 'Anthropic Claude' },
 ];
-
-function stripApiKeys(config) {
-  const copy = JSON.parse(JSON.stringify(config || {}));
-  Object.keys(copy).forEach((name) => {
-    if (copy[name] && typeof copy[name] === 'object') {
-      copy[name].api_key = '';
-    }
-  });
-  return copy;
-}
 
 function ProviderOption({
   name,
@@ -54,10 +50,11 @@ function ProviderOption({
       {isSelected && (
         <div className="ml-7 space-y-3 p-4 bg-stone-50 rounded-lg border border-stone-200">
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">
+            <label htmlFor={`${name}-model`} className="block text-sm font-medium text-stone-700 mb-1">
               Model Name <span className="text-red-500">*</span>
             </label>
             <input
+              id={`${name}-model`}
               type="text"
               value={config?.model ?? ''}
               onChange={(e) => onUpdateField(name, 'model', e.target.value)}
@@ -74,10 +71,11 @@ function ProviderOption({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">
+            <label htmlFor={`${name}-api-key`} className="block text-sm font-medium text-stone-700 mb-1">
               API Key <span className="text-red-500">*</span>
             </label>
             <input
+              id={`${name}-api-key`}
               type="password"
               value={config?.api_key ?? ''}
               onChange={(e) => onUpdateField(name, 'api_key', e.target.value)}
@@ -91,6 +89,7 @@ function ProviderOption({
               type="button"
               onClick={onTestApiKey}
               disabled={testingKey}
+              aria-busy={testingKey}
               className="mt-2 px-3 py-1.5 text-xs rounded-lg border border-stone-300 hover:bg-stone-100 text-stone-700"
             >
               {testingKey ? 'Testing...' : 'Test API Key'}
@@ -99,10 +98,11 @@ function ProviderOption({
 
           {name === 'azure_openai' && (
             <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">
+              <label htmlFor={`${name}-endpoint`} className="block text-sm font-medium text-stone-700 mb-1">
                 Endpoint URL <span className="text-red-500">*</span>
               </label>
               <input
+                id={`${name}-endpoint`}
                 type="text"
                 value={config?.endpoint ?? ''}
                 onChange={(e) => onUpdateField(name, 'endpoint', e.target.value)}
@@ -133,33 +133,15 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
   const modalRef = useRef(null);
   const closeButtonRef = useRef(null);
   const [activeProvider, setActiveProvider] = useState(() => {
-    for (const [name, config] of Object.entries(providers)) {
-      if (config.enabled) return name;
-    }
-    return 'openai';
+    return activeProviderName(providers) || 'openai';
   });
 
   const [localProviders, setLocalProviders] = useState(() => {
     try {
       const draft = localStorage.getItem(DRAFT_KEY);
-      const parsed = draft ? { ...providers, ...JSON.parse(draft) } : providers;
-      const normalized = { ...parsed };
-      for (const { name } of PROVIDER_ORDER) {
-        normalized[name] = {
-          enabled: Boolean(normalized[name]?.enabled),
-          model: String(normalized[name]?.model ?? ''),
-          api_key: normalized[name]?.api_key ?? '',
-          endpoint: String(normalized[name]?.endpoint ?? ''),
-        };
-      }
-      const enabled = PROVIDER_ORDER.filter((p) => normalized[p.name]?.enabled).map((p) => p.name);
-      if (enabled.length !== 1) {
-        for (const { name } of PROVIDER_ORDER) normalized[name].enabled = false;
-        normalized.openai.enabled = true;
-      }
-      return normalized;
+      return mergeDraftProviders(providers, draft ? JSON.parse(draft) : null);
     } catch {
-      return providers;
+      return normalizeProviders(providers, { preserveApiKeys: true });
     }
   });
 
@@ -322,12 +304,13 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
         <div className="sticky top-0 bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between z-10">
           <h2 id="provider-settings-title" className="text-xl font-bold text-stone-800">Provider Settings</h2>
           <button
+            type="button"
             ref={closeButtonRef}
             onClick={handleCancel}
             className="text-stone-400 hover:text-stone-600 text-2xl leading-none transition-colors"
             aria-label="Close"
           >
-            x
+            ×
           </button>
         </div>
 
@@ -359,12 +342,14 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
 
           <div className="pt-4 border-t border-stone-200 flex gap-3">
             <button
+              type="button"
               onClick={handleSave}
               className="flex-1 py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
             >
               Save Settings
             </button>
             <button
+              type="button"
               onClick={handleCancel}
               className="px-4 py-2.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 font-medium transition-colors"
             >

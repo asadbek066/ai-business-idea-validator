@@ -1,65 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { analyzeIdea } from './api';
+import {
+  loadPersistedProviders,
+  stripApiKeys,
+} from './providerConfig';
 import IdeaForm from './components/IdeaForm';
 import ResultCard from './components/ResultCard';
 import LoadingSpinner from './components/LoadingSpinner';
 import ProviderSettings from './components/ProviderSettings';
-
-const DEFAULT_PROVIDERS = {
-  openai: { enabled: true, model: '', api_key: '' },
-  azure_openai: { enabled: false, model: '', api_key: '', endpoint: '' },
-  gemini: { enabled: false, model: '', api_key: '' },
-  claude: { enabled: false, model: '', api_key: '' },
-};
-
-function stripApiKeys(config) {
-  const copy = JSON.parse(JSON.stringify(config || {}));
-  Object.keys(copy).forEach((name) => {
-    if (copy[name] && typeof copy[name] === 'object') {
-      copy[name].api_key = '';
-    }
-  });
-  return copy;
-}
-
-function normalizeProviders(saved) {
-  const merged = {
-    openai: { ...DEFAULT_PROVIDERS.openai, ...(saved?.openai || {}) },
-    azure_openai: { ...DEFAULT_PROVIDERS.azure_openai, ...(saved?.azure_openai || {}) },
-    gemini: { ...DEFAULT_PROVIDERS.gemini, ...(saved?.gemini || {}) },
-    claude: { ...DEFAULT_PROVIDERS.claude, ...(saved?.claude || {}) },
-  };
-
-  const enabledKeys = Object.entries(merged)
-    .filter(([, cfg]) => Boolean(cfg?.enabled))
-    .map(([name]) => name);
-
-  if (enabledKeys.length !== 1) {
-    Object.keys(merged).forEach((name) => {
-      merged[name].enabled = false;
-    });
-    merged.openai.enabled = true;
-  }
-
-  return merged;
-}
-
-function loadProviders() {
-  try {
-    const saved = localStorage.getItem('ai_providers');
-    return saved ? normalizeProviders(JSON.parse(saved)) : normalizeProviders(null);
-  } catch {
-    // Corrupt or unavailable browser storage must not prevent first use.
-    return normalizeProviders(null);
-  }
-}
 
 export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [providers, setProviders] = useState(loadProviders);
+  const [providers, setProviders] = useState(loadPersistedProviders);
+  const requestControllerRef = useRef(null);
+
+  useEffect(() => () => {
+    requestControllerRef.current?.abort();
+  }, []);
 
   const handleProviderChange = (newProviders) => {
     setProviders(newProviders);
@@ -71,31 +31,44 @@ export default function App() {
   };
 
   const handleSubmit = async (idea) => {
+    if (requestControllerRef.current) return;
+
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const data = await analyzeIdea(idea, providers);
+      const data = await analyzeIdea(idea, providers, { signal: controller.signal });
       setResult(data);
-    } catch (e) {
-      setError(e.message || 'Something went wrong. Please try again.');
+    } catch (requestError) {
+      if (requestError?.name !== 'AbortError') {
+        setError(requestError?.message || 'Something went wrong. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setLoading(false);
+      }
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-stone-800">Business Idea Validator</h1>
-            <p className="text-stone-500 text-sm mt-0.5">Market potential, risks, first steps, and a practical verdict.</p>
+            <p className="text-stone-500 text-sm mt-0.5">
+              Market potential, risks, first steps, and a practical verdict.
+            </p>
           </div>
           <button
+            type="button"
             onClick={() => setShowSettings(true)}
-            className="px-3 py-1.5 text-sm rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 transition-colors"
+            className="shrink-0 px-3 py-1.5 text-sm rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 transition-colors"
             title="Provider settings"
+            aria-haspopup="dialog"
           >
             Settings
           </button>
@@ -114,7 +87,7 @@ export default function App() {
         )}
 
         {result && !loading && (
-          <div className="mt-8 space-y-4">
+          <div className="mt-8 space-y-4" aria-label="Business idea analysis">
             {result.provider_used && (
               <div className="text-xs text-stone-500 mb-2">
                 Provider: <span className="font-medium">{result.provider_used}</span>
