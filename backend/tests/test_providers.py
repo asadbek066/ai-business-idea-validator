@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from app.providers import (
     ClaudeProvider,
     GeminiProvider,
     OpenAIProvider,
+    ProviderBusyError,
     ProviderConfigurationError,
     ProviderRequestError,
     ProviderResponseError,
@@ -171,6 +173,54 @@ def test_azure_dns_guard_accepts_global_resolution(monkeypatch) -> None:
         lambda *args: [(0, 0, 0, "", ("1.1.1.1", 443))],
     )
     run(providers._assert_public_azure_endpoint("https://resource.openai.azure.com"))
+
+
+def test_azure_dns_timeout_retains_capacity_until_resolver_finishes(monkeypatch) -> None:
+    slots = threading.BoundedSemaphore(1)
+    started = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    def blocked_getaddrinfo(*_: object) -> list[tuple[object, ...]]:
+        nonlocal calls
+        calls += 1
+        started.set()
+        release.wait(timeout=2)
+        return [(0, 0, 0, "", ("1.1.1.1", 443))]
+
+    monkeypatch.setattr(providers, "_AZURE_DNS_LOOKUP_SLOTS", slots)
+    monkeypatch.setattr(providers, "AZURE_DNS_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(providers.socket, "getaddrinfo", blocked_getaddrinfo)
+
+    async def exercise() -> None:
+        try:
+            with pytest.raises(ProviderRequestError):
+                await providers._assert_public_azure_endpoint("https://resource.openai.azure.com")
+
+            for _ in range(100):
+                if started.is_set():
+                    break
+                await asyncio.sleep(0.005)
+            assert started.is_set()
+
+            with pytest.raises(ProviderBusyError):
+                await providers._assert_public_azure_endpoint("https://another.openai.azure.com")
+            assert calls == 1
+        finally:
+            release.set()
+
+        for _ in range(100):
+            try:
+                await providers._assert_public_azure_endpoint("https://another.openai.azure.com")
+                break
+            except ProviderBusyError:
+                await asyncio.sleep(0.005)
+        else:
+            pytest.fail("DNS lookup capacity was not released after the resolver finished")
+
+        assert calls == 2
+
+    run(exercise())
 
 
 def test_provider_failure_is_non_sensitive_and_not_retried(monkeypatch) -> None:
