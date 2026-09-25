@@ -31,6 +31,7 @@ Executed 2026-09-25 on Python 3.12.3 and Node 26.10.0 (the latter differs from C
 - Backend suite: 72 tests passed; coverage 78.44% (CI floor 75%). pip check, pip-audit, Ruff lint/format, mypy, compileall, tracked-file secret scan, and `git diff --check` passed.
 - Focused Azure DNS regression: 3 DNS guard tests passed, including timeout capacity retention.
 - Frontend lint, 11 tests, and production build passed again after the backend change.
+- PR #11 GitHub Actions passed across Python 3.10, 3.11, 3.12, 3.13, and Node 24. `Vercel Preview Comments` and the separate frontend Vercel deployment passed.
 - An independent adversarial reviewer found no blocking defect in the fix. A theoretical callback limitation exists only if a nonstandard runner closes an event loop while executor work is pending; normal `asyncio.run` drains the default executor at shutdown.
 
 ## Findings and review
@@ -45,19 +46,20 @@ Executed 2026-09-25 on Python 3.12.3 and Node 26.10.0 (the latter differs from C
 
 ## Implemented fixes
 
-- Added a process-wide bounded Azure DNS admission semaphore, retained its slot until the resolver future finishes, shielded resolver work from request timeout/cancellation, and added a regression test. Local checks pass; the change is not yet committed or pushed.
+- Added a process-wide bounded Azure DNS admission semaphore, retained its slot until the resolver future finishes, shielded resolver work from request timeout/cancellation, and added a regression test. Committed as `919fee2` and pushed in [PR #11](https://github.com/asadbek066/ai-business-idea-validator/pull/11).
 
 ## Deferred work and risks
 
 - Consider adding component-level frontend coverage when a maintainable DOM test setup is justified.
 - Review whether to coordinate the React 19 dependency PRs and whether Tailwind 4 migration is desirable; both require dependency/configuration changes beyond a simple version bump.
 - Determine why the Vercel check fails across PRs before treating those preview statuses as resolved.
+- The legacy `Vercel – ai-business-idea-validator` status failed again on PR #11, while `Vercel – ai-business-idea-validator-frontend` passed. The Vercel CLI log command required an interactive account login unavailable in this environment, so the failure cause is not verified. GitHub Actions is green.
 - DNS rebinding remains a deployment egress-policy concern documented by the project.
 
 ## Current campaign status
 
-Status: VALIDATING
+Status: PR_OPEN
 
 Current branch: `codex/bound-azure-dns-lookups`.
 
-Next action: stage and inspect the final diff, commit, push, open a PR, and inspect its CI.
+Next action: continue portfolio discovery with repository #2; revisit the legacy Vercel status if Vercel access becomes available.
