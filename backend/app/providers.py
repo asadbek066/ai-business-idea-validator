@@ -27,11 +27,25 @@ RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 MAX_RETRY_AFTER_SECONDS = 5.0
 DEFAULT_AZURE_API_VERSION = "2025-01-01-preview"
 AZURE_DNS_TIMEOUT_SECONDS = 2.0
+AZURE_DNS_CONCURRENCY_LIMIT = 4
+# Resolver calls can outlive their request timeout, so cap submitted work separately.
+_AZURE_DNS_LOOKUP_SLOTS = threading.BoundedSemaphore(AZURE_DNS_CONCURRENCY_LIMIT)
 
 _HTTP_CLIENTS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = (
     weakref.WeakKeyDictionary()
 )
 _HTTP_CLIENTS_LOCK = threading.Lock()
+
+
+def _release_azure_dns_lookup_slot(
+    future: asyncio.Future[Any], slots: threading.BoundedSemaphore
+) -> None:
+    """Release DNS capacity only after the underlying resolver call finishes."""
+
+    if not future.cancelled():
+        # A timed-out caller no longer awaits this future; consume a late exception.
+        future.exception()
+    slots.release()
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -91,7 +105,7 @@ class ProviderTimeoutError(ProviderRequestError):
 
 
 class ProviderBusyError(ProviderRequestError):
-    """The process-wide provider capacity queue is full."""
+    """Bounded provider capacity could not be acquired."""
 
     def __init__(self, provider_name: str):
         super().__init__(provider_name, retryable=True)
@@ -147,16 +161,28 @@ async def _assert_public_azure_endpoint(endpoint: str) -> None:
     remains the final defense against DNS rebinding and is documented.
     """
 
+    hostname = endpoint.split("://", 1)[1].split("/", 1)[0]
+    slots = _AZURE_DNS_LOOKUP_SLOTS
+    if not slots.acquire(blocking=False):
+        raise ProviderBusyError("Azure OpenAI")
+
     try:
-        hostname = endpoint.split("://", 1)[1].split("/", 1)[0]
+        future = asyncio.get_running_loop().run_in_executor(
+            None,
+            socket.getaddrinfo,
+            hostname,
+            443,
+            0,
+            socket.SOCK_STREAM,
+        )
+    except Exception:
+        slots.release()
+        raise
+
+    future.add_done_callback(lambda completed: _release_azure_dns_lookup_slot(completed, slots))
+    try:
         infos = await asyncio.wait_for(
-            asyncio.to_thread(
-                socket.getaddrinfo,
-                hostname,
-                443,
-                0,
-                socket.SOCK_STREAM,
-            ),
+            asyncio.shield(future),
             timeout=AZURE_DNS_TIMEOUT_SECONDS,
         )
     except (OSError, ValueError, asyncio.TimeoutError):
