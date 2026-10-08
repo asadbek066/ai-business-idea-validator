@@ -117,6 +117,7 @@ cd frontend
 npm ci
 npm test
 npm run lint
+npm run audit:gate
 npm run dev
 ```
 
