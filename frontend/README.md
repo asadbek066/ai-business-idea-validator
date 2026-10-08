@@ -29,6 +29,7 @@ Copy `.env.example` when a direct backend URL is needed; leave
 npm run build
 npm test
 npm run lint
+npm run audit:gate
 ```
 
 Output is in `dist/`. For production, set `VITE_API_URL` to an HTTPS backend

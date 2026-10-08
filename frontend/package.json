@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "audit:gate": "node scripts/audit-gate.mjs --with-prod"
   },
   "dependencies": {
     "react": "^18.2.0",

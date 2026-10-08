@@ -1,0 +1,8 @@
+[
+  {
+    "id": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "reason": "No patched release exists upstream (latest braces 3.0.3 is affected). Reachable only via devDependency tailwindcss@3 (tailwindcss > chokidar > braces and tailwindcss > micromatch > braces; fast-glob is also flagged via micromatch): dev-only build tooling, glob patterns come from repo config, never from user input. Not reachable from production dependencies (react, react-dom); removal needs a breaking tailwindcss 4 upgrade.",
+    "expires": "2026-11-08"
+  }
+]
