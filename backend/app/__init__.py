@@ -1,1 +1,0 @@
-# Business Idea Validator API

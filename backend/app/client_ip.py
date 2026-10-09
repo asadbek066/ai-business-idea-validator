@@ -49,7 +49,7 @@ def normalize_ip(value: str) -> str | None:
             prefix = ipaddress.IPv6Address(int(address) >> 64 << 64)
             return f"{prefix}/64"
         return str(address)
-    except Exception:
+    except Exception:  # must never raise: a bad header cannot break the request
         return None
 
 
