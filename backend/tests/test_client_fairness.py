@@ -13,8 +13,13 @@ from app.providers import (
 )
 
 
+SCENARIO_TIMEOUT = 5.0
+
+
 def run(coroutine):
-    return asyncio.run(coroutine)
+    """Run a scenario, failing in seconds instead of waiting on real provider timeouts."""
+
+    return asyncio.run(asyncio.wait_for(coroutine, timeout=SCENARIO_TIMEOUT))
 
 
 async def _wait_for(predicate, attempts: int = 200) -> None:
@@ -38,18 +43,18 @@ def test_one_client_cannot_exceed_its_limit_while_others_are_served() -> None:
             return "ok"
 
         hogs = [
-            asyncio.create_task(gate.run(blocking, "t", 5, client_key="1.1.1.1")) for _ in range(2)
+            asyncio.create_task(gate.run(blocking, "t", 1, client_key="1.1.1.1")) for _ in range(2)
         ]
         await _wait_for(lambda: started == 2)
 
         # Third call from the same client is refused and takes no global slot.
         with pytest.raises(ProviderClientLimitError):
-            await gate.run(blocking, "t", 5, client_key="1.1.1.1")
+            await gate.run(blocking, "t", 1, client_key="1.1.1.1")
         assert started == 2
 
         # Another client is still served while the hog holds its two slots.
         other = [
-            asyncio.create_task(gate.run(blocking, "t", 5, client_key="2.2.2.2")) for _ in range(2)
+            asyncio.create_task(gate.run(blocking, "t", 1, client_key="2.2.2.2")) for _ in range(2)
         ]
         await _wait_for(lambda: started == 4)
         release.set()
@@ -69,12 +74,12 @@ def test_client_limit_error_is_checked_before_global_capacity(monkeypatch) -> No
             entered.set()
             await release.wait()
 
-        first = asyncio.create_task(gate.run(blocking, "t", 5, client_key="a"))
+        first = asyncio.create_task(gate.run(blocking, "t", 1, client_key="a"))
         await entered.wait()
         # Same client: per-client error (immediately), not the global busy timeout.
         monkeypatch.setattr(ai_clients, "PROVIDER_QUEUE_TIMEOUT_SECONDS", 5)
         with pytest.raises(ProviderClientLimitError):
-            await asyncio.wait_for(gate.run(blocking, "t", 5, client_key="a"), timeout=1)
+            await asyncio.wait_for(gate.run(blocking, "t", 1, client_key="a"), timeout=1)
         release.set()
         await first
 
@@ -90,9 +95,9 @@ def test_slots_released_on_provider_error_and_map_is_emptied() -> None:
 
         for _ in range(3):
             with pytest.raises(ProviderRequestError):
-                await gate.run(boom, "t", 5, client_key="a")
+                await gate.run(boom, "t", 1, client_key="a")
         assert gate._client_counts == {}
-        assert await gate.run(lambda: asyncio.sleep(0, "fine"), "t", 5, client_key="a") == "fine"
+        assert await gate.run(lambda: asyncio.sleep(0, "fine"), "t", 1, client_key="a") == "fine"
 
     run(scenario())
 
@@ -113,7 +118,7 @@ def test_slots_released_on_cancellation() -> None:
             await task
         assert gate._client_counts == {}
         # Global slot was released too.
-        assert await gate.run(lambda: asyncio.sleep(0, "ok"), "t", 5, client_key="b") == "ok"
+        assert await gate.run(lambda: asyncio.sleep(0, "ok"), "t", 1, client_key="b") == "ok"
 
     run(scenario())
 
@@ -128,11 +133,11 @@ def test_queued_cancellation_and_busy_timeout_release_client_slot(monkeypatch) -
             entered.set()
             await release.wait()
 
-        first = asyncio.create_task(gate.run(blocking, "t", 5, client_key="a"))
+        first = asyncio.create_task(gate.run(blocking, "t", 1, client_key="a"))
         await entered.wait()
         monkeypatch.setattr(ai_clients, "PROVIDER_QUEUE_TIMEOUT_SECONDS", 0.01)
         with pytest.raises(ProviderBusyError):
-            await gate.run(blocking, "t", 5, client_key="b")
+            await gate.run(blocking, "t", 1, client_key="b")
         assert gate._client_counts == {"a": 1}
         release.set()
         await first
@@ -190,6 +195,8 @@ def test_endpoint_returns_429_with_retry_after_for_over_limit_client(monkeypatch
     monkeypatch.setattr(main, "ANALYZE_LIMITER", SlidingWindowLimiter(100, 60))
     monkeypatch.setattr(main, "VALIDATE_LIMITER", SlidingWindowLimiter(100, 60))
     monkeypatch.setattr(ai_clients, "PROVIDER_CALL_GATE", ProviderCallGate(4, per_client_limit=1))
+    # Keep any regression-induced wait short; the happy path never reaches these.
+    monkeypatch.setattr(ai_clients, "PROVIDER_QUEUE_TIMEOUT_SECONDS", 0.5)
 
     async def scenario():
         release = asyncio.Event()
