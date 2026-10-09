@@ -91,6 +91,21 @@ is hosted. On Vercel, platform documentation states the edge overwrites
 `X-Forwarded-For` and sets `X-Real-IP`, so `CLIENT_IP_HEADER=x-real-ip` is the
 expected choice; this was not verified against a live deployment.
 
+Operational notes:
+
+- Forwarded values must be bare addresses. A value with a port
+  (`1.2.3.4:443`, `[2001:db8::1]:443`) or a zone id (`fe80::1%eth0`) does not
+  parse and falls back to the proxy's address, so configure the proxy to send
+  bare addresses.
+- The start command above does not pass `--proxy-headers`, but uvicorn
+  (0.53.0 in `requirements-dev.lock`) enables `proxy_headers` by default and
+  trusts `FORWARDED_ALLOW_IPS` (default `127.0.0.1,::1`). A proxy connecting
+  from a trusted address has its `X-Forwarded-For` applied to the socket peer
+  before the app sees it. Do not combine that with `TRUSTED_PROXY_COUNT`
+  unless intended (use `--no-proxy-headers` or narrow `FORWARDED_ALLOW_IPS`).
+- Rate limits and the per-client concurrency cap are per process; running
+  several workers or instances multiplies them.
+
 Client disconnects cancel the in-flight bounded task when the server observes
 them. A request that was already accepted by a provider cannot be recalled, so
 provider quotas and gateway egress policy remain part of production operations.
