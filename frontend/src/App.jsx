@@ -89,7 +89,7 @@ export default function App() {
         {result && !loading && (
           <div className="mt-8 space-y-4" aria-label="Business idea analysis">
             {result.provider_used && (
-              <div className="text-xs text-stone-500 mb-6">
+              <div className="text-xs text-stone-500">
                 Provider: <span className="font-medium">{result.provider_used}</span>
               </div>
             )}
