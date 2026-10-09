@@ -12,7 +12,6 @@ from app.providers import (
     ProviderRequestError,
 )
 
-
 SCENARIO_TIMEOUT = 5.0
 
 
