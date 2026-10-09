@@ -111,6 +111,10 @@ class ProviderBusyError(ProviderRequestError):
         super().__init__(provider_name, retryable=True)
 
 
+class ProviderClientLimitError(ProviderBusyError):
+    """One client already has its fair share of provider calls in flight."""
+
+
 class ProviderResponseError(ProviderError):
     """The provider returned a successful HTTP response we cannot trust."""
 

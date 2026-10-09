@@ -20,6 +20,7 @@ from .providers import (
     GeminiProvider,
     OpenAIProvider,
     ProviderBusyError,
+    ProviderClientLimitError,
     ProviderConfigurationError,
     ProviderError,
     ProviderRequestError,
@@ -54,6 +55,9 @@ PROVIDER_CONCURRENCY_LIMIT = _bounded_int(
 PROVIDER_QUEUE_TIMEOUT_SECONDS = _bounded_float(
     "PROVIDER_QUEUE_TIMEOUT_SECONDS", default=3.0, minimum=0.1, maximum=30.0
 )
+PER_CLIENT_CONCURRENCY_LIMIT = _bounded_int(
+    "PER_CLIENT_CONCURRENCY_LIMIT", default=2, minimum=1, maximum=32
+)
 ANALYZE_DEADLINE_SECONDS = _bounded_float(
     "ANALYZE_DEADLINE_SECONDS", default=75.0, minimum=5.0, maximum=180.0
 )
@@ -65,8 +69,10 @@ VALIDATE_DEADLINE_SECONDS = _bounded_float(
 class ProviderCallGate:
     """Bound in-flight provider work per event loop without unbounded queuing."""
 
-    def __init__(self, limit: int):
+    def __init__(self, limit: int, per_client_limit: int = PER_CLIENT_CONCURRENCY_LIMIT):
         self.limit = max(1, limit)
+        self.per_client_limit = max(1, per_client_limit)
+        self._client_counts: dict[str, int] = {}
         self._semaphores: weakref.WeakKeyDictionary[
             asyncio.AbstractEventLoop, asyncio.Semaphore
         ] = weakref.WeakKeyDictionary()
@@ -82,6 +88,40 @@ class ProviderCallGate:
             return semaphore
 
     async def run(
+        self,
+        call: Callable[[], Awaitable[T]],
+        provider_name: str,
+        deadline_seconds: float,
+        client_key: str | None = None,
+    ) -> T:
+        # Per-client fairness is checked first so a client over its own limit
+        # never takes (or waits for) a global slot.
+        self._reserve_client(client_key, provider_name)
+        try:
+            return await self._run_global(call, provider_name, deadline_seconds)
+        finally:
+            self._release_client(client_key)
+
+    def _reserve_client(self, client_key: str | None, provider_name: str) -> None:
+        if client_key is None:
+            return
+        with self._lock:
+            count = self._client_counts.get(client_key, 0)
+            if count >= self.per_client_limit:
+                raise ProviderClientLimitError(provider_name)
+            self._client_counts[client_key] = count + 1
+
+    def _release_client(self, client_key: str | None) -> None:
+        if client_key is None:
+            return
+        with self._lock:
+            count = self._client_counts.get(client_key, 0) - 1
+            if count > 0:
+                self._client_counts[client_key] = count
+            else:
+                self._client_counts.pop(client_key, None)
+
+    async def _run_global(
         self,
         call: Callable[[], Awaitable[T]],
         provider_name: str,
@@ -263,9 +303,12 @@ def _extract_and_normalize(raw: str) -> dict[str, str]:
 
 
 async def _run_provider_call(
-    call: Callable[[], Awaitable[T]], provider_name: str, deadline_seconds: float
+    call: Callable[[], Awaitable[T]],
+    provider_name: str,
+    deadline_seconds: float,
+    client_key: str | None = None,
 ) -> T:
-    return await PROVIDER_CALL_GATE.run(call, provider_name, deadline_seconds)
+    return await PROVIDER_CALL_GATE.run(call, provider_name, deadline_seconds, client_key)
 
 
 def _selected_api_key(config: object) -> str | None:
@@ -305,7 +348,9 @@ def _get_selected_provider(
 
 
 async def analyze_idea(
-    idea: str, providers_config: AIProvidersConfig | None = None
+    idea: str,
+    providers_config: AIProvidersConfig | None = None,
+    client_key: str | None = None,
 ) -> tuple[dict[str, str], str, str | None]:
     """Analyze using the selected provider; never return a fake result."""
 
@@ -324,6 +369,7 @@ async def analyze_idea(
             lambda: provider.analyze(normalized_idea),
             provider_name,
             ANALYZE_DEADLINE_SECONDS,
+            client_key,
         )
     except ProviderError:
         logger.warning("Provider analysis failed: %s", provider_name)
@@ -343,6 +389,7 @@ async def analyze_idea(
 
 async def validate_provider(
     providers_config: AIProvidersConfig | None = None,
+    client_key: str | None = None,
 ) -> tuple[bool, str]:
     """Validate the selected provider with a bounded, minimal request."""
 
@@ -351,7 +398,7 @@ async def validate_provider(
     provider, provider_name = _get_selected_provider(providers_config)
     try:
         ok, used_provider = await _run_provider_call(
-            provider.validate, provider_name, VALIDATE_DEADLINE_SECONDS
+            provider.validate, provider_name, VALIDATE_DEADLINE_SECONDS, client_key
         )
     except ProviderError:
         logger.warning("Provider validation failed: %s", provider_name)

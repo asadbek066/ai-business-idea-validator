@@ -19,6 +19,7 @@ from .ai_clients import analyze_idea, validate_provider
 from .client_ip import client_key
 from .providers import (
     ProviderBusyError,
+    ProviderClientLimitError,
     ProviderConfigurationError,
     ProviderError,
     ProviderRequestError,
@@ -284,6 +285,14 @@ async def _enforce_rate_limit(request: Request, limiter: SlidingWindowLimiter) -
         )
 
 
+def _client_limit_http_error() -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail="Too many requests in progress. Please wait for one to finish.",
+        headers={"Retry-After": "5"},
+    )
+
+
 def _raise_analysis_http_error(error: ProviderError) -> NoReturn:
     if isinstance(error, ProviderConfigurationError):
         raise HTTPException(
@@ -301,6 +310,8 @@ def _raise_analysis_http_error(error: ProviderError) -> NoReturn:
             detail="The provider took too long to respond. Please try again.",
             headers={"Retry-After": "5"},
         ) from None
+    if isinstance(error, ProviderClientLimitError):
+        raise _client_limit_http_error()
     if isinstance(error, ProviderBusyError):
         raise HTTPException(
             status_code=503,
@@ -335,6 +346,7 @@ async def analyze_idea_endpoint(
             lambda: analyze_idea(
                 body.idea,
                 providers_config=body.ai_providers,
+                client_key=client_key(request),
             ),
         )
         return AnalyzeIdeaResponse(
@@ -371,7 +383,7 @@ async def validate_provider_endpoint(
     await _enforce_rate_limit(request, VALIDATE_LIMITER)
     try:
         ok, provider_used = await _run_until_client_disconnect(
-            request, lambda: validate_provider(body.ai_providers)
+            request, lambda: validate_provider(body.ai_providers, client_key=client_key(request))
         )
         return ValidateProviderResponse(
             ok=ok,
@@ -400,6 +412,9 @@ async def validate_provider_endpoint(
             detail="Provider validation timed out. Please try again.",
             headers={"Retry-After": "5"},
         ) from None
+    except ProviderClientLimitError:
+        logger.warning("Provider validation client concurrency limit reached")
+        raise _client_limit_http_error() from None
     except ProviderBusyError:
         logger.warning("Provider validation capacity is busy")
         raise HTTPException(

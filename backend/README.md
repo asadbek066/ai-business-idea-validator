@@ -39,6 +39,9 @@ Azure OpenAI users can set:
 - `MAX_REQUEST_BODY_BYTES` (default 64 KiB), `PROVIDER_CONCURRENCY_LIMIT`,
   `PROVIDER_QUEUE_TIMEOUT_SECONDS`, `PROVIDER_REQUEST_TIMEOUT_SECONDS`,
   `ANALYZE_DEADLINE_SECONDS`, and `VALIDATE_DEADLINE_SECONDS`
+- `PER_CLIENT_CONCURRENCY_LIMIT` (default 2): in-flight provider calls one
+  client address may hold; extra requests get `429` with `Retry-After` and do
+  not use a global slot
 
 The API accepts one explicitly enabled provider per request. Azure endpoints
 must use HTTPS and an Azure OpenAI resource hostname. The backend resolves the
