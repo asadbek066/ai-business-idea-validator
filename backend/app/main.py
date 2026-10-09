@@ -229,13 +229,6 @@ app = FastAPI(
     version="2.1.0",
     lifespan=lifespan,
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_parse_cors_origins(),
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
-)
 
 
 @app.middleware("http")
@@ -248,9 +241,18 @@ async def security_headers(request: Request, call_next: Any) -> Any:
     return response
 
 
-# Keep this outermost so it can reject chunked bodies before any downstream
-# middleware or FastAPI parser buffers them.
+# Starlette wraps in call order: the LAST middleware added is outermost. The body
+# limit sits just inside CORS so it still rejects chunked bodies before FastAPI
+# buffers them, while CORS (a pass-through for request bodies) wraps its early
+# 413/400 responses so browsers can read them for allowed origins.
 app.add_middleware(RequestBodyLimitMiddleware, max_body_bytes=MAX_REQUEST_BODY_BYTES)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_parse_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.exception_handler(RequestValidationError)
