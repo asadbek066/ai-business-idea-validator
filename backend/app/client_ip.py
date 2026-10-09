@@ -35,18 +35,22 @@ def normalize_ip(value: str) -> str | None:
     """Return a canonical key for an IP literal, or ``None`` if it is not one.
 
     IPv4-mapped IPv6 maps to IPv4; other IPv6 addresses are keyed on their /64.
+    Scoped addresses (``fe80::1%eth0``) are rejected. This never raises.
     """
 
     try:
-        address = ipaddress.ip_address(value.strip())
-    except ValueError:
+        text = value.strip()
+        if "%" in text:  # zone ids parse on some Python versions only
+            return None
+        address = ipaddress.ip_address(text)
+        if isinstance(address, ipaddress.IPv6Address):
+            if address.ipv4_mapped is not None:
+                return str(address.ipv4_mapped)
+            prefix = ipaddress.IPv6Address(int(address) >> 64 << 64)
+            return f"{prefix}/64"
+        return str(address)
+    except Exception:
         return None
-    if isinstance(address, ipaddress.IPv6Address):
-        if address.ipv4_mapped is not None:
-            return str(address.ipv4_mapped)
-        network = ipaddress.ip_network(f"{address.exploded}/64", strict=False)
-        return f"{network.network_address}/64"
-    return str(address)
 
 
 def _header_values(request: Request, name: str) -> list[str]:
