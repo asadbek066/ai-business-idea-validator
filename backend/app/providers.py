@@ -17,6 +17,7 @@ from urllib.parse import quote
 
 import httpx
 
+from .async_utils import wait_for_shielded
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 
 logger = logging.getLogger(__name__)
@@ -186,10 +187,7 @@ async def _assert_public_azure_endpoint(endpoint: str) -> None:
 
     future.add_done_callback(lambda completed: _release_azure_dns_lookup_slot(completed, slots))
     try:
-        infos = await asyncio.wait_for(
-            asyncio.shield(future),
-            timeout=AZURE_DNS_TIMEOUT_SECONDS,
-        )
+        infos = await wait_for_shielded(future, AZURE_DNS_TIMEOUT_SECONDS)
     except (OSError, ValueError, asyncio.TimeoutError):
         raise ProviderRequestError("Azure OpenAI") from None
 

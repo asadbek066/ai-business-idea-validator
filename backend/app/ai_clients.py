@@ -12,6 +12,7 @@ from typing import TypeVar, cast
 
 from pydantic import SecretStr
 
+from .async_utils import wait_for_cancel_safe
 from .prompts import RESPONSE_KEYS, SECTION_LABELS
 from .providers import (
     AIProvider,
@@ -130,14 +131,22 @@ class ProviderCallGate:
         semaphore = self._semaphore_for_loop()
         acquired = False
         try:
-            try:
-                await asyncio.wait_for(semaphore.acquire(), timeout=PROVIDER_QUEUE_TIMEOUT_SECONDS)
+
+            async def acquire_slot() -> None:
+                # Set in the same step the acquire completes, so the slot is
+                # released on every path even if the waiter is cancelled or
+                # times out at that exact moment.
+                nonlocal acquired
+                await semaphore.acquire()
                 acquired = True
+
+            try:
+                await wait_for_cancel_safe(acquire_slot(), PROVIDER_QUEUE_TIMEOUT_SECONDS)
             except asyncio.TimeoutError as error:
                 raise ProviderBusyError(provider_name) from error
 
             try:
-                return await asyncio.wait_for(call(), timeout=deadline_seconds)
+                return await wait_for_cancel_safe(call(), deadline_seconds)
             except asyncio.TimeoutError as error:
                 raise ProviderTimeoutError(provider_name) from error
         finally:

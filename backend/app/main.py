@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from .ai_clients import analyze_idea, validate_provider
+from .async_utils import wait_for_shielded
 from .client_ip import client_key
 from .providers import (
     ProviderBusyError,
@@ -143,7 +144,7 @@ async def _run_until_client_disconnect(
             if task.done():
                 return task.result()
             try:
-                return await asyncio.wait_for(asyncio.shield(task), timeout=0.25)
+                return await wait_for_shielded(task, 0.25)
             except asyncio.TimeoutError:
                 if await request.is_disconnected():
                     task.cancel()
