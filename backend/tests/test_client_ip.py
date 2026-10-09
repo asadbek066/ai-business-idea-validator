@@ -135,3 +135,104 @@ def test_rate_limit_uses_trusted_hop_when_configured(monkeypatch) -> None:
     # One trusted proxy: the last entry is the proxy-observed client, so
     # distinct clients get distinct buckets.
     assert _statuses_for_spoofed_requests(monkeypatch, proxies=1) == [200, 200]
+
+
+ZONE_IDS = ["fe80::1%eth0", "fe80::1%1", "[fe80::1%eth0]", "2001:db8::1%25eth0", "::1%lo"]
+HOSTILE = [
+    "a" * 100_000,
+    "1" * 5000 + "." + "1" * 5000,
+    "1.2.3.4\x00",
+    "\x00",
+    "1.2.3.4\n5.6.7.8",
+    "1.2.3.4\r\nX: y",
+    "::",
+    "::1",
+    "0.0.0.0",
+    "1.2.3.4:443",
+    "[2001:db8::1]:443",
+    "[::1]",
+    "%",
+    "::%",
+    "١.٢.٣.٤",
+    "1.2.3.4%eth0",
+]
+
+
+@pytest.mark.parametrize("value", ZONE_IDS)
+def test_scoped_ipv6_is_rejected_and_never_raises(value: str) -> None:
+    assert normalize_ip(value) is None
+    request = make_request("10.0.0.9", {"X-Forwarded-For": value, "X-Real-IP": value})
+    assert client_key(request, trusted_proxies=1) == "10.0.0.9"
+    assert client_key(request, header="x-real-ip") == "10.0.0.9"
+
+
+@pytest.mark.parametrize("value", HOSTILE)
+def test_hostile_values_never_raise(value: str) -> None:
+    result = normalize_ip(value)
+    assert result is None or isinstance(result, str)
+    # Headers arrive as latin-1 bytes; keep only values that can be encoded.
+    try:
+        raw = value.encode("latin-1")
+    except UnicodeEncodeError:
+        return
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "headers": [(b"x-forwarded-for", raw), (b"x-real-ip", raw)],
+            "client": ("10.0.0.9", 1),
+        }
+    )
+    assert isinstance(client_key(request, trusted_proxies=1), str)
+    assert isinstance(client_key(request, header="x-real-ip"), str)
+
+
+def test_unspecified_and_loopback_are_valid_keys() -> None:
+    assert normalize_ip("0.0.0.0") == "0.0.0.0"
+    assert normalize_ip("::") == "::/64"
+    assert normalize_ip("::1") == "::/64"
+
+
+def test_normalize_ip_is_total_even_if_parsing_misbehaves(monkeypatch) -> None:
+    def boom(_: str) -> None:
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(client_ip.ipaddress, "ip_address", boom)
+    assert normalize_ip("1.2.3.4") is None
+
+
+@pytest.mark.parametrize("mode", ["xff", "header"])
+@pytest.mark.parametrize("value", ZONE_IDS)
+def test_endpoint_does_not_500_on_scoped_address(monkeypatch, mode: str, value: str) -> None:
+    monkeypatch.setattr(client_ip, "TRUSTED_PROXY_COUNT", 1 if mode == "xff" else 0)
+    monkeypatch.setattr(client_ip, "CLIENT_IP_HEADER", "x-real-ip" if mode == "header" else "")
+    monkeypatch.setattr(main, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(main, "VALIDATE_LIMITER", SlidingWindowLimiter(1, 60))
+
+    async def ok(*args, **kwargs):
+        return True, "openai"
+
+    monkeypatch.setattr(main, "validate_provider", ok)
+    body = {
+        "ai_providers": {
+            "openai": {"enabled": True, "model": "gpt-4o-mini", "api_key": "k" * 12},
+            "azure_openai": {"enabled": False},
+            "gemini": {"enabled": False},
+            "claude": {"enabled": False},
+        }
+    }
+    name = "X-Forwarded-For" if mode == "xff" else "X-Real-IP"
+
+    async def scenario() -> list[int]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=main.app, client=("10.0.0.9", 1)),
+            base_url="http://testserver",
+        ) as http:
+            return [
+                (await http.post("/validate-provider", json=body, headers={name: value})).status_code
+                for _ in range(2)
+            ]
+
+    # Falls back to the peer's single bucket: 200 then 429, never 500.
+    assert asyncio.run(scenario()) == [200, 429]
