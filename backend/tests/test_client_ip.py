@@ -230,7 +230,9 @@ def test_endpoint_does_not_500_on_scoped_address(monkeypatch, mode: str, value: 
             base_url="http://testserver",
         ) as http:
             return [
-                (await http.post("/validate-provider", json=body, headers={name: value})).status_code
+                (
+                    await http.post("/validate-provider", json=body, headers={name: value})
+                ).status_code
                 for _ in range(2)
             ]
 
