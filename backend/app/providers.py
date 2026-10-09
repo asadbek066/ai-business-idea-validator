@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import socket
@@ -151,7 +152,7 @@ def _retry_after_seconds(value: str | None) -> float | None:
         seconds = float(value.strip())
     except (TypeError, ValueError):
         return None
-    if seconds < 0:
+    if math.isnan(seconds) or seconds < 0:
         return None
     return min(seconds, MAX_RETRY_AFTER_SECONDS)
 
