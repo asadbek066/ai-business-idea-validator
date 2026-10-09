@@ -65,7 +65,7 @@ function ProviderOption({
                 name === 'gemini' ? 'gemini-pro' :
                 'your-model-name'
               }
-              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500 bg-white"
               required
             />
           </div>
@@ -82,7 +82,7 @@ function ProviderOption({
               placeholder="Enter your API key"
               autoComplete="new-password"
               maxLength={512}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500 bg-white"
               required
             />
             <button
@@ -108,7 +108,7 @@ function ProviderOption({
                 onChange={(e) => onUpdateField(name, 'endpoint', e.target.value)}
                 placeholder="https://your-resource.openai.azure.com"
                 maxLength={512}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500 bg-white"
                 required
               />
             </div>
@@ -322,7 +322,7 @@ export default function ProviderSettings({ providers, onChange, onClose }) {
             Save applies changes. Cancel closes without saving.
           </p>
 
-          <fieldset className="space-y-3">
+          <fieldset className="space-y-3 pt-3">
             <legend className="sr-only">AI provider</legend>
             {PROVIDER_ORDER.map((p) => (
               <ProviderOption

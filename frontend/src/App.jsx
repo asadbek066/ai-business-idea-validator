@@ -55,7 +55,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-stone-200 bg-white/80 backdrop-blur sticky top-0 z-10">
+      <header className="border-b border-stone-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-stone-800">Business Idea Validator</h1>
@@ -89,7 +89,7 @@ export default function App() {
         {result && !loading && (
           <div className="mt-8 space-y-4" aria-label="Business idea analysis">
             {result.provider_used && (
-              <div className="text-xs text-stone-500 mb-2">
+              <div className="text-xs text-stone-500 mb-6">
                 Provider: <span className="font-medium">{result.provider_used}</span>
               </div>
             )}

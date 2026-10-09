@@ -22,7 +22,7 @@ export default function IdeaForm({ onSubmit, disabled, placeholder = 'e.g. A sub
         rows={4}
         maxLength={2000}
         disabled={disabled}
-        className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-y disabled:opacity-60 disabled:cursor-not-allowed"
+        className="mt-4 w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder:text-stone-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-y disabled:opacity-60 disabled:cursor-not-allowed"
         aria-describedby="idea-hint"
       />
       <p id="idea-hint" className="text-xs text-stone-500">
@@ -31,7 +31,7 @@ export default function IdeaForm({ onSubmit, disabled, placeholder = 'e.g. A sub
       <button
         type="submit"
         disabled={!idea.trim() || disabled}
-        className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+        className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
       >
         {disabled ? 'Analyzing…' : 'Analyze idea'}
       </button>
