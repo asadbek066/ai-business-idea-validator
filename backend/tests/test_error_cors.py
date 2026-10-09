@@ -102,7 +102,7 @@ def test_security_headers_on_every_response_kind() -> None:
     assert responses["ok"].status_code == 200
     assert responses["413"].status_code == 413
     assert responses["400"].status_code == 400
-    for name, response in responses.items():
+    for response in responses.values():
         assert_security_headers(response)
     # CORS stays correct alongside them.
     assert responses["preflight-allowed"].headers["access-control-allow-origin"] == ALLOWED
