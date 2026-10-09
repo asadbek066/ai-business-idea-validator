@@ -1,4 +1,4 @@
-﻿# Business Idea Validator - Backend
+# Business Idea Validator - Backend
 
 FastAPI backend for the AI Business Idea Validator using cloud providers (OpenAI, Azure OpenAI, Gemini, Claude).
 

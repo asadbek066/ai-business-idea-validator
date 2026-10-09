@@ -4,13 +4,9 @@
 
 - Demo: https://ai-business-idea-validator-frontend.vercel.app
 
-## Problem
+## What it does
 
-Early-stage founders often validate ideas with scattered notes and vague advice. The hard part is turning an idea into a focused, actionable next step list (market signal, risks, and what to do first).
-
-## Solution
-
-A small web app that takes a business idea and returns a structured analysis:
+A small web app that takes a business idea and returns a structured analysis from the LLM provider you choose:
 
 - Market potential
 - Key risks and challenges
@@ -19,7 +15,7 @@ A small web app that takes a business idea and returns a structured analysis:
 
 The UI supports dynamic cloud provider selection. Providers are configured by the user.
 
-## Core features
+## Features
 
 - **Single active provider**: choose one of OpenAI, Azure OpenAI, Gemini, or Claude.
 - **User-supplied models and keys**: model name is typed by the user; cloud keys are entered in the UI.
@@ -40,7 +36,7 @@ The UI supports dynamic cloud provider selection. Providers are configured by th
 
 Key backend modules:
 
-- `backend/app/main.py`: API entrypoint (`POST /analyze-idea`)
+- `backend/app/main.py`: API entrypoint (`POST /analyze-idea`, `POST /validate-provider`, `GET /health`)
 - `backend/app/providers.py`: provider clients (OpenAI/Azure/Gemini/Claude)
 - `backend/app/ai_clients.py`: provider selection + safe JSON extraction
 - `backend/app/prompts.py`: prompt template and required JSON response shape
@@ -65,12 +61,14 @@ Key backend modules:
 ## Security & configuration
 
 - Do not commit secrets. This repo ships with `.env.example`, not `.env`.
-- Backend config is minimal:
+- Backend config (full list with defaults in `backend/.env.example`):
   - `CORS_ORIGINS` (comma-separated allowlist)
   - `AZURE_OPENAI_API_VERSION` (default: `2025-01-01-preview`)
   - `RATE_LIMIT_*` settings for the process-local abuse guard
   - `MAX_REQUEST_BODY_BYTES`, `PROVIDER_CONCURRENCY_LIMIT`,
     `PROVIDER_QUEUE_TIMEOUT_SECONDS`, and provider deadline settings
+  - `TRUSTED_PROXY_COUNT`, `CLIENT_IP_HEADER` and `PER_CLIENT_CONCURRENCY_LIMIT`
+    for per-client limits behind a proxy (see `backend/README.md`)
 - The backend expects an explicit `ai_providers` object with exactly one
   enabled provider. It does not have a server-side API-key fallback.
 - API keys are held in memory for the current tab/request only. Persisted
@@ -81,8 +79,6 @@ Key backend modules:
 - A browser disconnect cancels the server-side task when observed. A provider
   may already have accepted a request before cancellation, so deployment-level
   quotas and provider billing controls remain important.
-
-See `backend/.env.example`.
 
 ## Quick test (deployed app)
 
@@ -104,9 +100,9 @@ See `backend/.env.example`.
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install --require-hashes -r requirements-dev.lock
-copy .env.example .env
+cp .env.example .env
 uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
 
