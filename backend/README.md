@@ -63,6 +63,31 @@ gateway. Provider calls use the deployment-based Azure Chat Completions path
 and the configured `AZURE_OPENAI_API_VERSION`; update that setting deliberately
 when adopting a newer Azure API contract.
 
+### Client address behind a proxy
+
+Rate limits (and per-client concurrency) are keyed on a client address. By
+default that is the socket peer, which is correct when the API is reached
+directly. Behind a reverse proxy or a platform edge (for example Vercel) every
+user would otherwise share the proxy's address and one bucket, so configure how
+the address is derived. `X-Forwarded-For` is client-controlled and is never
+trusted unless you opt in:
+
+- `TRUSTED_PROXY_COUNT` (default `0` = off): number of proxies you operate in
+  front of the app. The Nth-from-last `X-Forwarded-For` entry is used, so
+  entries a client prepends are ignored. Use `1` for a single proxy that
+  appends the peer address it saw.
+- `CLIENT_IP_HEADER` (default empty): name of a single-value header your
+  platform overwrites on every request, such as `x-real-ip`. Takes precedence
+  over `TRUSTED_PROXY_COUNT`. A header that is absent or repeated is ignored.
+
+Values that are not valid IPv4/IPv6 literals fall back to the socket peer.
+IPv6 clients are keyed on their /64 and IPv4-mapped IPv6 maps to IPv4. Only
+set these when every request really passes through the proxy; otherwise
+callers can spoof the header. The repository does not record where the backend
+is hosted. On Vercel, platform documentation states the edge overwrites
+`X-Forwarded-For` and sets `X-Real-IP`, so `CLIENT_IP_HEADER=x-real-ip` is the
+expected choice; this was not verified against a live deployment.
+
 Client disconnects cancel the in-flight bounded task when the server observes
 them. A request that was already accepted by a provider cannot be recalled, so
 provider quotas and gateway egress policy remain part of production operations.

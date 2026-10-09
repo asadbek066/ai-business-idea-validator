@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from .ai_clients import analyze_idea, validate_provider
+from .client_ip import client_key
 from .providers import (
     ProviderBusyError,
     ProviderConfigurationError,
@@ -274,8 +275,7 @@ async def request_validation_handler(_: Request, exc: RequestValidationError) ->
 async def _enforce_rate_limit(request: Request, limiter: SlidingWindowLimiter) -> None:
     if not RATE_LIMIT_ENABLED:
         return
-    client_host = request.client.host if request.client else "unknown"
-    retry_after = await limiter.retry_after(client_host)
+    retry_after = await limiter.retry_after(client_key(request))
     if retry_after is not None:
         raise HTTPException(
             status_code=429,
